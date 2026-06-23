@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.database.connection import get_db
 
+from app.services.memory_service import MemoryService
+
 from app.services.memory_retriever import MemoryRetriever
 
 from app.schemas.memory import (
@@ -78,6 +80,20 @@ def test_retrieve(
         }
         for memory in memories
     ]
+
+@router.get("/context")
+def get_memory_context(
+    query: str,
+    db: Session = Depends(get_db)
+):
+    context = MemoryService.get_context(
+        db,
+        query
+    )
+
+    return {
+        "context": context
+    }
 
 @router.get(
     "/{memory_id}",
