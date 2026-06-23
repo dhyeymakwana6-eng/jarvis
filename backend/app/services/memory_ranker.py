@@ -1,3 +1,5 @@
+import re
+
 from app.models.memory import Memory
 
 
@@ -6,7 +8,10 @@ class MemoryRanker:
     @staticmethod
     def rank(memories: list[Memory], query: str):
 
-        query_words = query.lower().split()
+        query_words = re.findall(
+            r"\w+",
+            query.lower()
+        )
 
         scored_memories = []
 
@@ -17,6 +22,10 @@ class MemoryRanker:
             memory_text = memory.content.lower()
 
             for word in query_words:
+
+                if len(word) <= 2:
+                    continue
+
                 if word in memory_text:
                     score += 1
 

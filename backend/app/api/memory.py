@@ -12,6 +12,11 @@ from app.schemas.memory import (
     MemoryResponse
 )
 
+from app.schemas.chat import (
+    ChatRequest,
+    ChatResponse
+)
+
 from app.crud.memory import (
     create_memory,
     get_memories,
@@ -94,6 +99,24 @@ def get_memory_context(
     return {
         "context": context
     }
+
+@router.post(
+    "/chat",
+    response_model=ChatResponse
+)
+def chat_endpoint(
+    request: ChatRequest,
+    db: Session = Depends(get_db)
+):
+
+    response = MemoryService.generate_response(
+        db,
+        request.query
+    )
+
+    return ChatResponse(
+        response=response
+    )
 
 @router.get(
     "/{memory_id}",
