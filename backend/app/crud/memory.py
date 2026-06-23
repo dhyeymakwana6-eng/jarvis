@@ -46,3 +46,16 @@ def delete_memory(db: Session, memory_id: int):
         db.commit()
 
     return memory
+
+
+def search_memories(
+    db: Session,
+    query: str
+):
+    return (
+        db.query(Memory)
+        .filter(
+            Memory.content.ilike(f"%{query}%")
+        )
+        .all()
+    )

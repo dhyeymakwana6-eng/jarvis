@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.database.connection import get_db
 
+from app.services.memory_retriever import MemoryRetriever
+
 from app.schemas.memory import (
     MemoryCreate,
     MemoryResponse
@@ -12,7 +14,8 @@ from app.crud.memory import (
     create_memory,
     get_memories,
     get_memory,
-    delete_memory
+    delete_memory,
+    search_memories
 )
 
 router = APIRouter(
@@ -46,6 +49,35 @@ def get_all_memories(
 ):
     return get_memories(db)
 
+@router.get("/search")
+def search_memory_endpoint(
+    q: str,
+    db: Session = Depends(get_db)
+):
+    return search_memories(
+        db,
+        q
+    )
+
+@router.get("/test-retrieve")
+def test_retrieve(
+    query: str,
+    db: Session = Depends(get_db)
+):
+    memories = MemoryRetriever.retrieve(
+        db,
+        query
+    )
+
+    return [
+        {
+            "id": memory.id,
+            "category": memory.category,
+            "content": memory.content,
+            "importance": memory.importance
+        }
+        for memory in memories
+    ]
 
 @router.get(
     "/{memory_id}",
@@ -54,6 +86,7 @@ def get_all_memories(
 def get_memory_endpoint(
     memory_id: int,
     db: Session = Depends(get_db)
+
 ):
     memory = get_memory(
         db,
@@ -88,3 +121,4 @@ def delete_memory_endpoint(
     return {
         "message": "Memory deleted"
     }
+

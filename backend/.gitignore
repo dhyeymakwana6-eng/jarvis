@@ -1,12 +1,15 @@
-venv
 venv/
-.venv
 .venv/
+
 __pycache__/
 *.pyc
+
 .env
+
 *.csv
 *.xlsx
 *.png
 *.jpg
 *.jpeg
+
+.vscode/
