@@ -7,6 +7,8 @@ from app.services.memory_service import MemoryService
 
 from app.services.memory_retriever import MemoryRetriever
 
+from app.services.memory_extraction.pipeline import MemoryPipeline
+
 from app.schemas.memory import (
     MemoryCreate,
     MemoryResponse
@@ -108,7 +110,11 @@ def chat_endpoint(
     request: ChatRequest,
     db: Session = Depends(get_db)
 ):
+    # Automatically extract and store memories
+    pipeline = MemoryPipeline(db)
+    pipeline.process_and_store(request.query)
 
+    # Generate response using stored memories
     response = MemoryService.generate_response(
         db,
         request.query
