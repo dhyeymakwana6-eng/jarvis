@@ -32,10 +32,12 @@ Build a personal AI assistant (Jarvis) that can:
 
 ### AI System
 
-- LLM integration
+- Local LLM integration
+- Cloud LLM integration (optional)
 - Personalized responses
 - Context injection
 - User profile generation
+- Provider-independent AI architecture
 
 ### Productivity
 
