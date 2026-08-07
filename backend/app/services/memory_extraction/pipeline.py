@@ -4,6 +4,7 @@ from app.crud.memory import create_memory
 from .extractor import MemoryExtractor
 from .classifier import MemoryClassifier
 from .scorer import MemoryScorer
+from .deduplicator import MemoryDeduplicator
 
 
 class MemoryPipeline:
@@ -17,6 +18,7 @@ class MemoryPipeline:
         self.extractor = MemoryExtractor()
         self.classifier = MemoryClassifier()
         self.scorer = MemoryScorer()
+        self.deduplicator = MemoryDeduplicator()
 
     def process(self, message: str):
         candidates = self.extractor.extract(message)
@@ -27,13 +29,21 @@ class MemoryPipeline:
             memory_type = self.classifier.classify(candidate)
             importance = self.scorer.score(candidate)
 
-            memories.append(
-                {
-                    "content": candidate,
-                    "category": memory_type,
-                    "importance": importance,
-                }
+            memory_data = {
+                "content": candidate,
+                "category": memory_type,
+                "importance": importance,
+            }
+
+            deduplication_result = self.deduplicator.process(
+                memory_data
             )
+
+            memory_data["deduplication"] = (
+                deduplication_result.model_dump()
+            )
+
+            memories.append(memory_data)
 
         return memories
 
