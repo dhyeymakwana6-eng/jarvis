@@ -20,7 +20,7 @@ class MemoryPipeline:
         self.scorer = MemoryScorer()
         self.deduplicator = MemoryDeduplicator()
 
-    def process(self, message: str):
+    def process(self, user_id: int, message: str):
         candidates = self.extractor.extract(message)
 
         memories = []
@@ -37,6 +37,7 @@ class MemoryPipeline:
 
             deduplication_result = self.deduplicator.process(
                 self.db,
+                user_id,
                 memory_data
             )
 
@@ -48,8 +49,8 @@ class MemoryPipeline:
 
         return memories
 
-    def process_and_store(self, message: str):
-        memories = self.process(message)
+    def process_and_store(self, user_id: int, message: str):
+        memories = self.process(user_id, message)
 
         stored_memories = []
 
@@ -60,6 +61,7 @@ class MemoryPipeline:
             if decision == DeduplicationDecision.NEW:
                 stored = create_memory(
                     db=self.db,
+                    user_id=user_id,
                     category=memory["category"],
                     content=memory["content"],
                     importance=importance_scaled

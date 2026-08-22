@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database.connection import get_db
+from app.core.constants import DEFAULT_USER_ID
 
 from app.services.memory_service import MemoryService
 
@@ -43,6 +44,7 @@ def create_memory_endpoint(
 ):
     return create_memory(
         db,
+        DEFAULT_USER_ID,
         memory.category,
         memory.content,
         memory.importance
@@ -112,7 +114,7 @@ def chat_endpoint(
 ):
     # Automatically extract and store memories
     pipeline = MemoryPipeline(db)
-    pipeline.process_and_store(request.query)
+    pipeline.process_and_store(DEFAULT_USER_ID, request.query)
 
     # Generate response using stored memories
     response = MemoryService.generate_response(
@@ -166,4 +168,3 @@ def delete_memory_endpoint(
     return {
         "message": "Memory deleted"
     }
-

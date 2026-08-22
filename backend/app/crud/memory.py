@@ -5,11 +5,13 @@ from app.models.memory import Memory
 
 def create_memory(
     db: Session,
+    user_id: int,
     category: str,
     content: str,
     importance: int
 ):
     memory = Memory(
+        user_id=user_id,
         category=category,
         content=content,
         importance=importance

@@ -31,9 +31,8 @@ class MemoryDeduplicator:
     the rest of the codebase, so these methods are intentionally sync
     rather than async.
 
-    NOTE: Matching is currently global (not scoped per-user) because
-    the Memory model doesn't have a user_id foreign key yet. Once that
-    lands, exact_match/semantic_match should filter by user_id too.
+    NOTE: Matching is scoped per-user via user_id, so one user's
+    memories never dedupe against another user's.
     """
 
     def __init__(self):
@@ -42,15 +41,17 @@ class MemoryDeduplicator:
     def exact_match(
         self,
         db: Session,
+        user_id: int,
         memory_data: dict
     ) -> Optional[Memory]:
         """
         Task 2: look for an existing memory with identical content
-        in the same category.
+        in the same category, scoped to this user.
         """
         return (
             db.query(Memory)
             .filter(
+                Memory.user_id == user_id,
                 Memory.category == memory_data["category"],
                 Memory.content.ilike(memory_data["content"].strip())
             )
@@ -60,6 +61,7 @@ class MemoryDeduplicator:
     def semantic_match(
         self,
         db: Session,
+        user_id: int,
         memory_data: dict
     ) -> Optional[Memory]:
         """
@@ -73,12 +75,13 @@ class MemoryDeduplicator:
     def determine_action(
         self,
         db: Session,
+        user_id: int,
         memory_data: dict
     ) -> DeduplicationResult:
         """
         Task 4: decide what to do with this memory candidate.
         """
-        existing = self.exact_match(db, memory_data)
+        existing = self.exact_match(db, user_id, memory_data)
 
         if existing:
             return DeduplicationResult(
@@ -100,6 +103,7 @@ class MemoryDeduplicator:
     def process(
         self,
         db: Session,
+        user_id: int,
         memory_data: dict
     ) -> DeduplicationResult:
-        return self.determine_action(db, memory_data)
+        return self.determine_action(db, user_id, memory_data)
