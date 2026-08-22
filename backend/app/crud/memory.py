@@ -34,6 +34,29 @@ def get_memory(db: Session, memory_id: int):
     )
 
 
+def update_memory(
+    db: Session,
+    memory_id: int,
+    category: str,
+    content: str,
+    importance: int
+):
+    memory = (
+        db.query(Memory)
+        .filter(Memory.id == memory_id)
+        .first()
+    )
+
+    if memory:
+        memory.category = category
+        memory.content = content
+        memory.importance = importance
+        db.commit()
+        db.refresh(memory)
+
+    return memory
+
+
 def delete_memory(db: Session, memory_id: int):
     memory = (
         db.query(Memory)
