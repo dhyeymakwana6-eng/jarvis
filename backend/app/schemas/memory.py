@@ -6,6 +6,10 @@ class MemoryCreate(BaseModel):
     content: str
     importance: int
 
+class MemoryUpdate(BaseModel):
+    category: str
+    content: str
+    importance: int
 
 class MemoryResponse(BaseModel):
     id: int

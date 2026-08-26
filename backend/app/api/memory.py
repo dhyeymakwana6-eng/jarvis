@@ -12,9 +12,9 @@ from app.services.memory_extraction.pipeline import MemoryPipeline
 
 from app.schemas.memory import (
     MemoryCreate,
+    MemoryUpdate,
     MemoryResponse
 )
-
 from app.schemas.chat import (
     ChatRequest,
     ChatResponse
@@ -24,10 +24,10 @@ from app.crud.memory import (
     create_memory,
     get_memories,
     get_memory,
+    update_memory,
     delete_memory,
     search_memories
 )
-
 router = APIRouter(
     prefix="/memory",
     tags=["Memory"]
@@ -148,6 +148,30 @@ def get_memory_endpoint(
 
     return memory
 
+@router.put(
+    "/{memory_id}",
+    response_model=MemoryResponse
+)
+def update_memory_endpoint(
+    memory_id: int,
+    memory: MemoryUpdate,
+    db: Session = Depends(get_db)
+):
+    updated = update_memory(
+        db,
+        memory_id,
+        memory.category,
+        memory.content,
+        memory.importance
+    )
+
+    if not updated:
+        raise HTTPException(
+            status_code=404,
+            detail="Memory not found"
+        )
+
+    return updated
 
 @router.delete("/{memory_id}")
 def delete_memory_endpoint(
