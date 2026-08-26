@@ -56,9 +56,19 @@ def create_memory_endpoint(
     response_model=list[MemoryResponse]
 )
 def get_all_memories(
+    category: str = None,
+    min_importance: int = None,
+    limit: int = 50,
+    offset: int = 0,
     db: Session = Depends(get_db)
 ):
-    return get_memories(db)
+    return get_memories(
+        db,
+        category,
+        min_importance,
+        limit,
+        offset
+    )
 
 @router.get("/search")
 def search_memory_endpoint(

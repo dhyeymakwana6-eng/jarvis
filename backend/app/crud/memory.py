@@ -24,9 +24,28 @@ def create_memory(
     return memory
 
 
-def get_memories(db: Session):
-    return db.query(Memory).all()
+def get_memories(
+    db: Session,
+    category: str = None,
+    min_importance: int = None,
+    limit: int = 50,
+    offset: int = 0
+):
+    query = db.query(Memory)
 
+    if category:
+        query = query.filter(Memory.category == category)
+
+    if min_importance is not None:
+        query = query.filter(Memory.importance >= min_importance)
+
+    return (
+        query
+        .order_by(Memory.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
 def get_memory(db: Session, memory_id: int):
     return (
