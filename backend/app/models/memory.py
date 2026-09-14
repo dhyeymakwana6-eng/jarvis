@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, String, Text, ForeignKey
+from sqlalchemy import Integer, String, Text, ForeignKey, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base, TimestampMixin
@@ -18,3 +18,5 @@ class Memory(Base, TimestampMixin):
     content: Mapped[str] = mapped_column(Text)
 
     importance: Mapped[int] = mapped_column(Integer)
+
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

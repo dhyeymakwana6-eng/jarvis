@@ -29,9 +29,13 @@ def get_memories(
     category: str = None,
     min_importance: int = None,
     limit: int = 50,
-    offset: int = 0
+    offset: int = 0,
+    include_deleted: bool = False
 ):
     query = db.query(Memory)
+
+    if not include_deleted:
+        query = query.filter(Memory.is_deleted == False)
 
     if category:
         query = query.filter(Memory.category == category)
@@ -47,12 +51,14 @@ def get_memories(
         .all()
     )
 
-def get_memory(db: Session, memory_id: int):
-    return (
-        db.query(Memory)
-        .filter(Memory.id == memory_id)
-        .first()
-    )
+
+def get_memory(db: Session, memory_id: int, include_deleted: bool = False):
+    query = db.query(Memory).filter(Memory.id == memory_id)
+
+    if not include_deleted:
+        query = query.filter(Memory.is_deleted == False)
+
+    return query.first()
 
 
 def update_memory(
@@ -64,7 +70,7 @@ def update_memory(
 ):
     memory = (
         db.query(Memory)
-        .filter(Memory.id == memory_id)
+        .filter(Memory.id == memory_id, Memory.is_deleted == False)
         .first()
     )
 
@@ -81,13 +87,29 @@ def update_memory(
 def delete_memory(db: Session, memory_id: int):
     memory = (
         db.query(Memory)
-        .filter(Memory.id == memory_id)
+        .filter(Memory.id == memory_id, Memory.is_deleted == False)
         .first()
     )
 
     if memory:
-        db.delete(memory)
+        memory.is_deleted = True
         db.commit()
+        db.refresh(memory)
+
+    return memory
+
+
+def restore_memory(db: Session, memory_id: int):
+    memory = (
+        db.query(Memory)
+        .filter(Memory.id == memory_id, Memory.is_deleted == True)
+        .first()
+    )
+
+    if memory:
+        memory.is_deleted = False
+        db.commit()
+        db.refresh(memory)
 
     return memory
 
@@ -99,7 +121,8 @@ def search_memories(
     return (
         db.query(Memory)
         .filter(
-            Memory.content.ilike(f"%{query}%")
+            Memory.content.ilike(f"%{query}%"),
+            Memory.is_deleted == False
         )
         .all()
     )

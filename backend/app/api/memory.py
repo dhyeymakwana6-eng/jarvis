@@ -26,6 +26,7 @@ from app.crud.memory import (
     get_memory,
     update_memory,
     delete_memory,
+    restore_memory,
     search_memories
 )
 router = APIRouter(
@@ -60,6 +61,7 @@ def get_all_memories(
     min_importance: int = None,
     limit: int = 50,
     offset: int = 0,
+    include_deleted: bool = False,
     db: Session = Depends(get_db)
 ):
     return get_memories(
@@ -67,7 +69,8 @@ def get_all_memories(
         category,
         min_importance,
         limit,
-        offset
+        offset,
+        include_deleted
     )
 
 @router.get("/search")
@@ -202,3 +205,18 @@ def delete_memory_endpoint(
     return {
         "message": "Memory deleted"
     }
+
+@router.post("/{memory_id}/restore", response_model=MemoryResponse)
+def restore_memory_endpoint(
+    memory_id: int,
+    db: Session = Depends(get_db)
+):
+    memory = restore_memory(db, memory_id)
+
+    if not memory:
+        raise HTTPException(
+            status_code=404,
+            detail="Memory not found or not deleted"
+        )
+
+    return memory
