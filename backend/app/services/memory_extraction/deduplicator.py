@@ -2,6 +2,7 @@ from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.memory import Memory
@@ -35,6 +36,10 @@ class MemoryDeduplicator:
     memories never dedupe against another user's.
     """
 
+    # Trigram similarity thresholds for semantic_match.
+    UPDATE_THRESHOLD = 0.85
+    SIMILAR_THRESHOLD = 0.6
+
     def __init__(self):
         pass
 
@@ -53,6 +58,7 @@ class MemoryDeduplicator:
             .filter(
                 Memory.user_id == user_id,
                 Memory.category == memory_data["category"],
+                Memory.is_deleted == False,
                 Memory.content.ilike(memory_data["content"].strip())
             )
             .first()
@@ -63,14 +69,36 @@ class MemoryDeduplicator:
         db: Session,
         user_id: int,
         memory_data: dict
-    ) -> Optional[Memory]:
+    ) -> Optional[tuple[Memory, float]]:
         """
         Task 3: find memories that are *similar* (not identical) using
-        embeddings/semantic similarity. Not implemented yet -- requires
-        an embedding model and vector similarity search, planned for
-        a later phase.
+        Postgres trigram similarity (pg_trgm). This is a lexical
+        approximation, not true semantic/embedding-based matching --
+        it catches reworded or partially overlapping text, but won't
+        catch paraphrases with entirely different wording. True
+        embedding-based semantic search is planned for a later phase.
         """
-        return None
+        content = memory_data["content"].strip()
+
+        similarity_expr = func.similarity(Memory.content, content)
+
+        result = (
+            db.query(Memory, similarity_expr.label("sim"))
+            .filter(
+                Memory.user_id == user_id,
+                Memory.category == memory_data["category"],
+                Memory.is_deleted == False,
+                similarity_expr >= self.SIMILAR_THRESHOLD
+            )
+            .order_by(similarity_expr.desc())
+            .first()
+        )
+
+        if result is None:
+            return None
+
+        memory, score = result
+        return memory, float(score)
 
     def determine_action(
         self,
@@ -91,13 +119,41 @@ class MemoryDeduplicator:
                 reason="Identical content already stored in this category."
             )
 
-        # Semantic matching not implemented yet, so anything that
-        # isn't an exact match is treated as new for now.
+        match = self.semantic_match(db, user_id, memory_data)
+
+        if match:
+            memory, score = match
+
+            if score >= self.UPDATE_THRESHOLD:
+                return DeduplicationResult(
+                    decision=DeduplicationDecision.UPDATE,
+                    existing_memory_id=memory.id,
+                    confidence=score,
+                    reason=(
+                        f"Highly similar memory found (similarity={score:.2f}); "
+                        "treating as an update to the existing memory."
+                    )
+                )
+
+            return DeduplicationResult(
+                decision=DeduplicationDecision.SIMILAR,
+                existing_memory_id=memory.id,
+                confidence=score,
+                reason=(
+                    f"Similar memory found (similarity={score:.2f}) but below "
+                    "the update threshold; not auto-merging."
+                )
+            )
+
+        # CONFLICT detection (e.g. contradictory facts) requires actual
+        # meaning comparison, not just text similarity -- not
+        # implemented yet. Planned for a later phase alongside
+        # embeddings/semantic search.
         return DeduplicationResult(
             decision=DeduplicationDecision.NEW,
             existing_memory_id=None,
             confidence=1.0,
-            reason="No exact match found."
+            reason="No exact or similar match found."
         )
 
     def process(

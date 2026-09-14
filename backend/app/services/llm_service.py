@@ -28,7 +28,7 @@ User Question:
 """
 
         response = chat(
-            model="llama3:8b",
+            model="qwen3.5:9b",
             messages=[
                 {
                     "role": "user",
