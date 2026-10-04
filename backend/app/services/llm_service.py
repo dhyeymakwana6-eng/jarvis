@@ -38,13 +38,17 @@ Rules:
         self,
         user_query: str,
         memory_context: str,
-        profile_context: str | None = None
+        profile_context: str | None = None,
+        tracking_context: str | None = None
     ) -> str:
 
         system = self.SYSTEM_PROMPT
 
         if profile_context:
             system += f"\n\nUser Profile:\n{profile_context}"
+
+        if tracking_context:
+            system += f"\n\nProjects and Goals:\n{tracking_context}"
 
         system += f"\n\nRelevant Memories:\n{memory_context}"
 

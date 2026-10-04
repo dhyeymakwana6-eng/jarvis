@@ -6,6 +6,7 @@ from app.services.context_builder import ContextBuilder
 from app.services.llm_service import LLMService
 from app.services.embedding_service import EmbeddingService
 from app.services.profile_service import ProfileService
+from app.services.tracking_service import TrackingService
 
 class MemoryService:
 
@@ -94,5 +95,6 @@ class MemoryService:
             memory_context=context,
             profile_context=ProfileService.to_context(
                 user.profile if user else None
-            )
+            ),
+            tracking_context=TrackingService.to_context(db, user_id)
         )

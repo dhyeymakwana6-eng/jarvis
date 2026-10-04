@@ -166,7 +166,23 @@ Status: Complete
 
 ## Phase 13 — Goal & Project Tracking
 
-Status: Not Started
+Status: Complete
+
+### Task 1 — Project and Goal Models (status, deadlines, progress, soft delete)
+
+Status: Complete
+
+### Task 2 — /projects and /goals API
+
+Status: Complete
+
+### Task 3 — Projects and Goals in Chat Context (deadlines, overdue)
+
+Status: Complete
+
+### Task 4 — Automatic Tracking from Chat (LLM, validated)
+
+Status: Complete
 
 ## Phase 14 — Task & Reminder System
 

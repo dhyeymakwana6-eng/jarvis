@@ -48,8 +48,8 @@ Database
 
 * User (with LLM-built JSONB profile)
 * Memory (with pgvector embedding, superseded_by link)
-* Project
-* Goal
+* Project (status, next action, soft delete)
+* Goal (status, target date, progress, soft delete)
 * Conversation
 * Decision
 
@@ -57,6 +57,8 @@ Database
 
 * Memory API
 * Profile API
+* Projects API
+* Goals API
 
 ### Memory Layer
 
@@ -75,6 +77,7 @@ Database
 * MemoryPipeline (extract → classify → score → deduplicate → store)
 * ConflictChecker (LLM: same / contradicts / compatible)
 * ProfileService
+* TrackingService (projects/goals from chat; chat context)
 
 ---
 
@@ -89,6 +92,7 @@ MemoryRetriever (semantic + keyword candidates)
 MemoryRanker (hybrid: 0.6 semantic, 0.25 keyword, 0.15 decayed importance)
 ↓
 ContextBuilder (top 10) + ProfileService (cached profile)
+  + TrackingService (open projects/goals, deadlines)
 ↓
 LLMService
 ↓
@@ -99,6 +103,7 @@ Conversation logged (conversations table)
 Background task:
   MemoryPipeline stores new memories from the query
   (a contradicting memory supersedes the old one)
+  TrackingService creates/updates projects and goals the message states
   ↓
   ProfileService rebuilds the profile if memories changed
   Conversation marked memories_processed
@@ -108,7 +113,8 @@ are processed in a background thread.
 
 ## Testing
 
-Unit tests (no database or Ollama needed), from backend/:
+Tests, from backend/ (database tests run in a rolled-back
+transaction and skip if Postgres is down; none need Ollama):
 
     pip install -r requirements-dev.txt
     python -m pytest
@@ -140,8 +146,7 @@ keyword-only ranking.
 
 ### Productivity Services
 
-* GoalManager
-* ProjectManager
+* TrackingService (goals and projects)
 * TaskManager
 * ReminderManager
 

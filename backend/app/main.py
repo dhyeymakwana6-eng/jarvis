@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.api.memory import router as memory_router
 from app.api.profile import router as profile_router
+from app.api.tracking import projects_router, goals_router
 from app.services.memory_extraction.pipeline import MemoryPipeline
 
 
@@ -30,6 +31,8 @@ app = FastAPI(
 
 app.include_router(memory_router)
 app.include_router(profile_router)
+app.include_router(projects_router)
+app.include_router(goals_router)
 
 
 @app.get("/")

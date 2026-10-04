@@ -5,6 +5,7 @@ from app.database.connection import SessionLocal
 from app.models.conversation import Conversation
 from app.services.embedding_service import EmbeddingService
 from app.services.profile_service import ProfileService
+from app.services.tracking_service import TrackingService
 from .conflict_checker import ConflictChecker
 from .extractor import MemoryExtractor
 from .classifier import MemoryClassifier
@@ -126,9 +127,9 @@ class MemoryPipeline:
     @staticmethod
     def process_conversation(conversation_id: int):
         """
-        Background-task entry point for /chat: extraction (with LLM
-        conflict checks) takes seconds, so it runs after the response
-        is sent. Opens its own session because the request's session
+        Background-task entry point for /chat: memory extraction (with
+        LLM conflict checks) and project/goal tracking take seconds, so
+        they run after the response is sent. Opens its own session because the request's session
         is closed by then. The conversation is only marked processed
         on success, so a crash or restart leaves it for
         process_pending() to retry.
@@ -144,6 +145,14 @@ class MemoryPipeline:
             user_id = conversation.user_id
 
             MemoryPipeline(db).process_and_store(
+                user_id,
+                conversation.user_message
+            )
+
+            # Projects/goals stated in the message ("I finished X",
+            # "I want to do Y by Friday").
+            TrackingService.process_message(
+                db,
                 user_id,
                 conversation.user_message
             )

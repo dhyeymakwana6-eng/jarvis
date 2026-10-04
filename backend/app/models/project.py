@@ -1,4 +1,6 @@
-from sqlalchemy import Integer, String, ForeignKey
+from datetime import datetime
+
+from sqlalchemy import Integer, String, Text, ForeignKey, Boolean, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base, TimestampMixin
@@ -13,6 +15,13 @@ class Project(Base, TimestampMixin):
 
     name: Mapped[str] = mapped_column(String(200))
 
-    status: Mapped[str] = mapped_column(String(50))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    next_action: Mapped[str] = mapped_column(String(500))
+    # One of app.schemas.tracking.Status.
+    status: Mapped[str] = mapped_column(String(50), default="active", server_default="active")
+
+    next_action: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
