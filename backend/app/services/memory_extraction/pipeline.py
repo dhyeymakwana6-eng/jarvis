@@ -1,7 +1,11 @@
 from sqlalchemy.orm import Session
 
-from app.crud.memory import create_memory, update_memory
+from app.crud.memory import create_memory, update_memory, supersede_memory
+from app.database.connection import SessionLocal
+from app.models.conversation import Conversation
 from app.services.embedding_service import EmbeddingService
+from app.services.profile_service import ProfileService
+from .conflict_checker import ConflictChecker
 from .extractor import MemoryExtractor
 from .classifier import MemoryClassifier
 from .scorer import MemoryScorer
@@ -13,13 +17,15 @@ class MemoryPipeline:
     Coordinates memory extraction processing.
     """
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, detect_conflicts: bool = True):
         self.db = db
 
         self.extractor = MemoryExtractor()
         self.classifier = MemoryClassifier()
         self.scorer = MemoryScorer()
-        self.deduplicator = MemoryDeduplicator()
+        self.deduplicator = MemoryDeduplicator(
+            ConflictChecker() if detect_conflicts else None
+        )
 
     def process(self, user_id: int, message: str):
         candidates = self.extractor.extract(message)
@@ -94,9 +100,91 @@ class MemoryPipeline:
                 )
                 stored_memories.append(stored)
 
-            # DUPLICATE / CONFLICT: don't store anything new.
-            # CONFLICT isn't produced yet, but skipping storage here
-            # keeps the behavior correct once it lands, rather than
-            # silently storing contradictory memories.
+            # CONFLICT: the newer statement wins. Store it and retire
+            # the contradicted memory (soft-deleted, restorable).
+            elif decision == DeduplicationDecision.CONFLICT:
+                stored = create_memory(
+                    db=self.db,
+                    user_id=user_id,
+                    category=memory["category"],
+                    content=memory["content"],
+                    importance=importance_scaled,
+                    embedding=memory["embedding"]
+                )
+                supersede_memory(
+                    self.db,
+                    user_id,
+                    memory["deduplication"]["existing_memory_id"],
+                    stored.id
+                )
+                stored_memories.append(stored)
+
+            # DUPLICATE: already stored, nothing to do.
 
         return stored_memories
+
+    @staticmethod
+    def process_conversation(conversation_id: int):
+        """
+        Background-task entry point for /chat: extraction (with LLM
+        conflict checks) takes seconds, so it runs after the response
+        is sent. Opens its own session because the request's session
+        is closed by then. The conversation is only marked processed
+        on success, so a crash or restart leaves it for
+        process_pending() to retry.
+        """
+        db = SessionLocal()
+
+        try:
+            conversation = db.get(Conversation, conversation_id)
+
+            if conversation is None or conversation.memories_processed:
+                return
+
+            user_id = conversation.user_id
+
+            MemoryPipeline(db).process_and_store(
+                user_id,
+                conversation.user_message
+            )
+
+            conversation.memories_processed = True
+            db.commit()
+        except Exception as error:
+            print(
+                f"WARNING: memory extraction failed for conversation "
+                f"{conversation_id}: {error}"
+            )
+            db.rollback()
+            return
+        finally:
+            db.close()
+
+        ProfileService.refresh_if_stale(user_id)
+
+    @staticmethod
+    def process_pending():
+        """
+        Runs extraction for conversations left unprocessed (e.g. the
+        server stopped mid-task). Called once at startup.
+        """
+        db = SessionLocal()
+
+        try:
+            pending_ids = [
+                conversation_id
+                for (conversation_id,) in (
+                    db.query(Conversation.id)
+                    .filter(Conversation.memories_processed == False)
+                    .order_by(Conversation.id)
+                    .all()
+                )
+            ]
+        finally:
+            db.close()
+
+        if pending_ids:
+            print(f"Processing {len(pending_ids)} pending conversation(s).")
+
+        for conversation_id in pending_ids:
+            MemoryPipeline.process_conversation(conversation_id)

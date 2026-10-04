@@ -46,8 +46,8 @@ Database
 
 ### Models
 
-* User
-* Memory (with pgvector embedding)
+* User (with LLM-built JSONB profile)
+* Memory (with pgvector embedding, superseded_by link)
 * Project
 * Goal
 * Conversation
@@ -56,6 +56,7 @@ Database
 ### API Layer
 
 * Memory API
+* Profile API
 
 ### Memory Layer
 
@@ -72,6 +73,8 @@ Database
 * EmbeddingService
 * LLMService
 * MemoryPipeline (extract → classify → score → deduplicate → store)
+* ConflictChecker (LLM: same / contradicts / compatible)
+* ProfileService
 
 ---
 
@@ -85,13 +88,35 @@ MemoryRetriever (semantic + keyword candidates)
 ↓
 MemoryRanker (hybrid: 0.6 semantic, 0.25 keyword, 0.15 decayed importance)
 ↓
-ContextBuilder (top 10)
+ContextBuilder (top 10) + ProfileService (cached profile)
 ↓
 LLMService
 ↓
 Response
 ↓
-MemoryPipeline stores new memories from the query
+Conversation logged (conversations table)
+↓
+Background task:
+  MemoryPipeline stores new memories from the query
+  (a contradicting memory supersedes the old one)
+  ↓
+  ProfileService rebuilds the profile if memories changed
+  Conversation marked memories_processed
+
+On startup, conversations not yet processed (e.g. after a crash)
+are processed in a background thread.
+
+## Testing
+
+Unit tests (no database or Ollama needed), from backend/:
+
+    pip install -r requirements-dev.txt
+    python -m pytest
+
+## Schema Changes
+
+From backend/: `python -m app.models.migrate` (idempotent).
+Add `--reembed` after changing the embedding model or prefixes.
 
 If Ollama embeddings are unavailable, retrieval falls back to
 keyword-only ranking.
@@ -111,7 +136,7 @@ keyword-only ranking.
 ### AI Services
 
 * LLMService
-* UserProfileManager (Future)
+* ProfileService
 
 ### Productivity Services
 

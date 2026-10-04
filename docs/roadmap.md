@@ -134,7 +134,35 @@ Status: Complete
 
 ## Phase 12 — User Profile Engine
 
-Status: Not Started
+Status: Complete
+
+### Task 1 — Structured Profile Model (User.profile JSONB)
+
+Status: Complete
+
+### Task 2 — LLM Profile Builder and /profile Endpoints
+
+Status: Complete
+
+### Task 3 — Profile Injected into Chat Prompt
+
+Status: Complete
+
+### Task 4 — Background Extraction and Profile Refresh
+
+Status: Complete
+
+### Task 5 — Contradiction Detection (CONFLICT supersedes old memory)
+
+Status: Complete
+
+### Task 6 — Durable Extraction via Conversation Log
+
+Status: Complete
+
+### Task 7 — Unit Test Suite (pytest)
+
+Status: Complete
 
 ## Phase 13 — Goal & Project Tracking
 

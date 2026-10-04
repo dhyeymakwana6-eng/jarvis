@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.memory import Memory
 from app.crud.memory import semantic_search_memories
+from .conflict_checker import ConflictChecker
 
 
 class DeduplicationDecision(str, Enum):
@@ -42,7 +43,7 @@ class MemoryDeduplicator:
     UPDATE_THRESHOLD = 0.85
     SIMILAR_THRESHOLD = 0.6
 
-    # Cosine distance thresholds for semantic_match (nomic-embed-text,
+    # Cosine distance thresholds for semantic_matches (nomic-embed-text,
     # document prefix). Measured: paraphrases ("I work at X" / "I am
     # employed by X") ~0.03; related-but-different facts ("I work at
     # X" / "I work at Y", "I like hiking" / "I enjoy hiking in the
@@ -50,8 +51,16 @@ class MemoryDeduplicator:
     UPDATE_DISTANCE = 0.05
     SIMILAR_DISTANCE = 0.20
 
-    def __init__(self):
-        pass
+    # Contradicting facts measured 0.12-0.32 apart ("I work at X" /
+    # "I work at Google now" ~0.20, "I study ME" / "I switched to CS"
+    # ~0.32); unrelated facts 0.36+. Candidates within this distance
+    # get an LLM contradiction check.
+    CONFLICT_DISTANCE = 0.35
+    CONFLICT_CANDIDATES = 3
+
+    def __init__(self, conflict_checker: Optional[ConflictChecker] = None):
+        # None disables CONFLICT detection (no LLM calls).
+        self.conflict_checker = conflict_checker
 
     def exact_match(
         self,
@@ -77,27 +86,25 @@ class MemoryDeduplicator:
             .first()
         )
 
-    def semantic_match(
+    def semantic_matches(
         self,
         db: Session,
         user_id: int,
         embedding: list[float]
-    ) -> Optional[tuple[Memory, float]]:
+    ) -> list[tuple[Memory, float]]:
         """
-        Nearest existing memory by embedding, as (memory, cosine
-        distance), or None if nothing is within SIMILAR_DISTANCE.
+        Nearest existing memories by embedding, as (memory, cosine
+        distance) pairs within CONFLICT_DISTANCE, nearest first.
         Searches across categories: the keyword classifier can put
         the same fact in different categories.
         """
-        matches = semantic_search_memories(
+        return semantic_search_memories(
             db,
             user_id,
             embedding,
-            limit=1,
-            max_distance=self.SIMILAR_DISTANCE
+            limit=self.CONFLICT_CANDIDATES,
+            max_distance=self.CONFLICT_DISTANCE
         )
-
-        return matches[0] if matches else None
 
     def lexical_match(
         self,
@@ -142,7 +149,8 @@ class MemoryDeduplicator:
     ) -> DeduplicationResult:
         """
         Decide what to do with this memory candidate. Uses embeddings
-        when available, trigram similarity otherwise.
+        (plus the LLM conflict check, if enabled) when available, and
+        trigram similarity otherwise.
         """
         existing = self.exact_match(db, user_id, memory_data)
 
@@ -155,7 +163,12 @@ class MemoryDeduplicator:
             )
 
         if embedding is not None:
-            return self._decide_semantic(db, user_id, embedding)
+            return self._decide_semantic(
+                db,
+                user_id,
+                memory_data["content"],
+                embedding
+            )
 
         return self._decide_lexical(db, user_id, memory_data)
 
@@ -163,14 +176,15 @@ class MemoryDeduplicator:
         self,
         db: Session,
         user_id: int,
+        content: str,
         embedding: list[float]
     ) -> DeduplicationResult:
-        match = self.semantic_match(db, user_id, embedding)
+        matches = self.semantic_matches(db, user_id, embedding)
 
-        if match is None:
+        if not matches:
             return self._new("No semantically similar memory found.")
 
-        memory, distance = match
+        memory, distance = matches[0]
         confidence = round(1 - distance, 3)
 
         if distance <= self.UPDATE_DISTANCE:
@@ -184,6 +198,14 @@ class MemoryDeduplicator:
                 )
             )
 
+        conflict = self._find_conflict(content, matches)
+
+        if conflict is not None:
+            return conflict
+
+        if distance > self.SIMILAR_DISTANCE:
+            return self._new("No semantically similar memory found.")
+
         return DeduplicationResult(
             decision=DeduplicationDecision.SIMILAR,
             existing_memory_id=memory.id,
@@ -193,6 +215,27 @@ class MemoryDeduplicator:
                 "may be a different fact; not merging."
             )
         )
+
+    def _find_conflict(
+        self,
+        content: str,
+        matches: list[tuple[Memory, float]]
+    ) -> Optional[DeduplicationResult]:
+        if self.conflict_checker is None:
+            return None
+
+        for memory, distance in matches:
+            verdict = self.conflict_checker.check(memory.content, content)
+
+            if verdict is not None and verdict.relation == "contradicts":
+                return DeduplicationResult(
+                    decision=DeduplicationDecision.CONFLICT,
+                    existing_memory_id=memory.id,
+                    confidence=round(1 - distance, 3),
+                    reason=f"Contradicts memory {memory.id}: {verdict.reason}"
+                )
+
+        return None
 
     def _decide_lexical(
         self,
@@ -230,9 +273,6 @@ class MemoryDeduplicator:
 
     @staticmethod
     def _new(reason: str) -> DeduplicationResult:
-        # CONFLICT detection (e.g. "I work at X" vs "I work at Y")
-        # needs meaning comparison beyond distance -- such pairs land
-        # in the SIMILAR band. Planned with an LLM-based check later.
         return DeduplicationResult(
             decision=DeduplicationDecision.NEW,
             existing_memory_id=None,

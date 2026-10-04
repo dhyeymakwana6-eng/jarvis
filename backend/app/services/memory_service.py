@@ -5,6 +5,7 @@ from app.services.memory_ranker import MemoryRanker
 from app.services.context_builder import ContextBuilder
 from app.services.llm_service import LLMService
 from app.services.embedding_service import EmbeddingService
+from app.services.profile_service import ProfileService
 
 class MemoryService:
 
@@ -84,9 +85,14 @@ class MemoryService:
             query
         )
 
+        user = ProfileService.get(db, user_id)
+
         llm = LLMService()
 
         return llm.generate_response(
             user_query=query,
-            memory_context=context
+            memory_context=context,
+            profile_context=ProfileService.to_context(
+                user.profile if user else None
+            )
         )

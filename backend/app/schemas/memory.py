@@ -23,6 +23,10 @@ class MemoryResponse(BaseModel):
     category: str
     content: str
     importance: int
+    is_deleted: bool = False
+    # Set when a newer, contradicting memory replaced this one;
+    # POST /memory/{id}/restore undoes it.
+    superseded_by_id: int | None = None
 
 
 class MemorySearchResult(MemoryResponse):

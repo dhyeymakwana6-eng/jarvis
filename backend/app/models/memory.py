@@ -38,3 +38,7 @@ class Memory(Base, TimestampMixin):
     access_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     embedding: Mapped[list[float] | None] = mapped_column(Vector(768), nullable=True)
+
+    # Set (together with is_deleted) when a newer memory contradicts
+    # this one, e.g. "I work at Google now" replacing "I work at X".
+    superseded_by_id: Mapped[int | None] = mapped_column(ForeignKey("memories.id"), nullable=True)

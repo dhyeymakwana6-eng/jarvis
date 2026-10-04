@@ -29,6 +29,11 @@ STATEMENTS = [
     "ALTER TABLE memories ADD COLUMN IF NOT EXISTS embedding vector(768)",
     "CREATE INDEX IF NOT EXISTS ix_memories_embedding_hnsw "
     "ON memories USING hnsw (embedding vector_cosine_ops)",
+    "ALTER TABLE memories ADD COLUMN IF NOT EXISTS superseded_by_id INTEGER REFERENCES memories(id)",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile JSONB",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_updated_at TIMESTAMPTZ",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_stale BOOLEAN NOT NULL DEFAULT true",
+    "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS memories_processed BOOLEAN NOT NULL DEFAULT false",
 ]
 
 

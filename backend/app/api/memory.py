@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database.connection import get_db
+from app.models.conversation import Conversation
 from app.core.constants import DEFAULT_USER_ID
 
 from app.services.memory_service import MemoryService
@@ -165,6 +166,7 @@ def get_memory_context(
 )
 def chat_endpoint(
     request: ChatRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     # Retrieve context before storing this message, so the user's
@@ -175,9 +177,21 @@ def chat_endpoint(
         request.query
     )
 
-    # Automatically extract and store memories
-    pipeline = MemoryPipeline(db)
-    pipeline.process_and_store(DEFAULT_USER_ID, request.query)
+    # Log the turn first, then extract/store memories and refresh the
+    # profile after the response is sent (conflict checks take a few
+    # seconds). The log row makes extraction survive a restart.
+    conversation = Conversation(
+        user_id=DEFAULT_USER_ID,
+        user_message=request.query,
+        assistant_message=response
+    )
+    db.add(conversation)
+    db.commit()
+
+    background_tasks.add_task(
+        MemoryPipeline.process_conversation,
+        conversation.id
+    )
 
     return ChatResponse(
         response=response

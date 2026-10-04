@@ -1,7 +1,16 @@
 from sqlalchemy.orm import Session
 
 from app.models.memory import Memory
+from app.models.user import User
 from app.services.embedding_service import EmbeddingService
+
+
+def _mark_profile_stale(db: Session, user_id: int):
+    # Committed by the caller together with the memory change.
+    user = db.get(User, user_id)
+
+    if user is not None:
+        user.profile_stale = True
 
 
 def create_memory(
@@ -26,6 +35,7 @@ def create_memory(
     )
 
     db.add(memory)
+    _mark_profile_stale(db, user_id)
     db.commit()
     db.refresh(memory)
 
@@ -98,6 +108,7 @@ def update_memory(
         memory.category = category
         memory.content = content
         memory.importance = importance
+        _mark_profile_stale(db, user_id)
         db.commit()
         db.refresh(memory)
 
@@ -109,6 +120,30 @@ def delete_memory(db: Session, user_id: int, memory_id: int):
 
     if memory:
         memory.is_deleted = True
+        _mark_profile_stale(db, user_id)
+        db.commit()
+        db.refresh(memory)
+
+    return memory
+
+
+def supersede_memory(
+    db: Session,
+    user_id: int,
+    memory_id: int,
+    superseded_by_id: int
+):
+    """
+    Retires a memory that a newer one contradicts. It's soft-deleted
+    (so retrieval skips it) and linked to its replacement; restoring
+    it clears the link.
+    """
+    memory = get_memory(db, user_id, memory_id)
+
+    if memory:
+        memory.is_deleted = True
+        memory.superseded_by_id = superseded_by_id
+        _mark_profile_stale(db, user_id)
         db.commit()
         db.refresh(memory)
 
@@ -128,6 +163,8 @@ def restore_memory(db: Session, user_id: int, memory_id: int):
 
     if memory:
         memory.is_deleted = False
+        memory.superseded_by_id = None
+        _mark_profile_stale(db, user_id)
         db.commit()
         db.refresh(memory)
 
