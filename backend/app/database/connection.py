@@ -14,7 +14,6 @@ SessionLocal = sessionmaker(
     autoflush=False,
     bind=engine
 )
-print("DATABASE_URL:", DATABASE_URL)
 
 def get_db():
     db = SessionLocal()

@@ -86,11 +86,51 @@ Status: Complete
 
 ## Phase 10 — Memory Management
 
-Status: Not Started
+Status: Complete
+
+### Task 1 — Update Endpoint
+
+Status: Complete
+
+### Task 2 — Filtering and Pagination
+
+Status: Complete
+
+### Task 3 — Soft Delete and Restore
+
+Status: Complete
+
+### Task 4 — Similarity Deduplication (pg_trgm)
+
+Status: Complete
+
+### Task 5 — Access Tracking and Importance Decay
+
+Status: Complete
 
 ## Phase 11 — Semantic Search
 
-Status: Not Started
+Status: Complete
+
+### Task 1 — Embeddings on Memory (pgvector + nomic-embed-text)
+
+Status: Complete
+
+### Task 2 — Semantic Search Endpoint
+
+Status: Complete
+
+### Task 3 — Hybrid Retrieval in Chat (semantic + keyword + importance)
+
+Status: Complete
+
+### Task 4 — Embedding-Based Deduplication
+
+Status: Complete
+
+### Task 5 — HNSW Vector Index and Re-embedding Migration
+
+Status: Complete
 
 ## Phase 12 — User Profile Engine
 

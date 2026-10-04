@@ -46,7 +46,12 @@ Database
 
 ### Models
 
-* Memory
+* User
+* Memory (with pgvector embedding)
+* Project
+* Goal
+* Conversation
+* Decision
 
 ### API Layer
 
@@ -54,8 +59,9 @@ Database
 
 ### Memory Layer
 
-* Memory CRUD
-* Memory Search
+* Memory CRUD (soft delete, restore)
+* Keyword Search
+* Semantic Search (pgvector, cosine distance, HNSW index)
 
 ### Service Layer
 
@@ -63,36 +69,32 @@ Database
 * MemoryRanker
 * ContextBuilder
 * MemoryService
+* EmbeddingService
+* LLMService
+* MemoryPipeline (extract → classify → score → deduplicate → store)
 
 ---
 
-## Current Memory Flow
-
-Query
-↓
-MemoryRetriever
-↓
-MemoryRanker
-↓
-ContextBuilder
-↓
-MemoryService
-
----
-
-## Future Response Flow
+## Current Response Flow
 
 User Query
 ↓
-MemoryRetriever
+EmbeddingService (search_query embedding)
 ↓
-MemoryRanker
+MemoryRetriever (semantic + keyword candidates)
 ↓
-ContextBuilder
+MemoryRanker (hybrid: 0.6 semantic, 0.25 keyword, 0.15 decayed importance)
+↓
+ContextBuilder (top 10)
 ↓
 LLMService
 ↓
 Response
+↓
+MemoryPipeline stores new memories from the query
+
+If Ollama embeddings are unavailable, retrieval falls back to
+keyword-only ranking.
 
 ---
 
@@ -104,7 +106,7 @@ Response
 * MemoryRanker
 * ContextBuilder
 * MemoryService
-* MemoryExtractor (Future)
+* MemoryExtractor
 
 ### AI Services
 

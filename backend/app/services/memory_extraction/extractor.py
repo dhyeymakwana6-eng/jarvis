@@ -1,4 +1,7 @@
+import re
 from typing import List
+
+from .keywords import contains_any
 
 
 class MemoryExtractor:
@@ -6,33 +9,32 @@ class MemoryExtractor:
     Extract candidate memories from user messages.
     """
 
+    PATTERNS = [
+        "i am",
+        "i'm",
+        "my name is",
+        "i study",
+        "i work",
+        "i like",
+        "i love",
+        "i prefer",
+        "i want",
+        "my project is",
+    ]
+
     def extract(self, message: str) -> List[str]:
         """
-        Extract memory candidates from a message.
+        Extract memory candidates from a message. Each sentence that
+        contains a self-describing pattern becomes its own candidate,
+        so questions and unrelated sentences aren't stored.
         """
 
-        candidates = []
+        sentences = re.split(r"(?<=[.!?])\s+|\n+", message.strip())
 
-        message_lower = message.lower()
-
-        patterns = [
-            "i am",
-            "i'm",
-            "my name is",
-            "i study",
-            "i work",
-            "i like",
-            "i love",
-            "i prefer",
-            "i want",
-            "i am building",
-            "i'm building",
-            "my project is",
+        return [
+            sentence.strip()
+            for sentence in sentences
+            if sentence.strip()
+            and not sentence.strip().endswith("?")
+            and contains_any(sentence, self.PATTERNS)
         ]
-
-        for pattern in patterns:
-            if pattern in message_lower:
-                candidates.append(message.strip())
-                break
-
-        return candidates

@@ -8,12 +8,15 @@ from app.services.memory_service import MemoryService
 
 from app.services.memory_retriever import MemoryRetriever
 
+from app.services.embedding_service import EmbeddingService, EmbeddingError
+
 from app.services.memory_extraction.pipeline import MemoryPipeline
 
 from app.schemas.memory import (
     MemoryCreate,
     MemoryUpdate,
-    MemoryResponse
+    MemoryResponse,
+    MemorySearchResult
 )
 from app.schemas.chat import (
     ChatRequest,
@@ -27,7 +30,8 @@ from app.crud.memory import (
     update_memory,
     delete_memory,
     restore_memory,
-    search_memories
+    search_memories,
+    semantic_search_memories
 )
 router = APIRouter(
     prefix="/memory",
@@ -66,6 +70,7 @@ def get_all_memories(
 ):
     return get_memories(
         db,
+        DEFAULT_USER_ID,
         category,
         min_importance,
         limit,
@@ -73,35 +78,71 @@ def get_all_memories(
         include_deleted
     )
 
-@router.get("/search")
+@router.get(
+    "/search",
+    response_model=list[MemoryResponse]
+)
 def search_memory_endpoint(
     q: str,
     db: Session = Depends(get_db)
 ):
     return search_memories(
         db,
+        DEFAULT_USER_ID,
         q
     )
 
-@router.get("/test-retrieve")
+@router.get(
+    "/semantic-search",
+    response_model=list[MemorySearchResult]
+)
+def semantic_search_endpoint(
+    q: str,
+    limit: int = 10,
+    db: Session = Depends(get_db)
+):
+    try:
+        query_embedding = EmbeddingService.generate_query(q)
+    except EmbeddingError as error:
+        raise HTTPException(
+            status_code=503,
+            detail=str(error)
+        )
+
+    matches = semantic_search_memories(
+        db,
+        DEFAULT_USER_ID,
+        query_embedding,
+        limit
+    )
+
+    return [
+        MemorySearchResult(
+            id=memory.id,
+            category=memory.category,
+            content=memory.content,
+            importance=memory.importance,
+            distance=round(distance, 4)
+        )
+        for memory, distance in matches
+    ]
+
+@router.get(
+    "/test-retrieve",
+    response_model=list[MemoryResponse]
+)
 def test_retrieve(
     query: str,
     db: Session = Depends(get_db)
 ):
-    memories = MemoryRetriever.retrieve(
+    # Debug endpoint: don't count these lookups as real accesses,
+    # otherwise testing skews importance decay.
+    return MemoryRetriever.retrieve(
         db,
-        query
+        DEFAULT_USER_ID,
+        query,
+        record_access=False
     )
-
-    return [
-        {
-            "id": memory.id,
-            "category": memory.category,
-            "content": memory.content,
-            "importance": memory.importance
-        }
-        for memory in memories
-    ]
 
 @router.get("/context")
 def get_memory_context(
@@ -110,6 +151,7 @@ def get_memory_context(
 ):
     context = MemoryService.get_context(
         db,
+        DEFAULT_USER_ID,
         query
     )
 
@@ -125,15 +167,17 @@ def chat_endpoint(
     request: ChatRequest,
     db: Session = Depends(get_db)
 ):
+    # Retrieve context before storing this message, so the user's
+    # own message isn't fed back to the LLM as a "known fact".
+    response = MemoryService.generate_response(
+        db,
+        DEFAULT_USER_ID,
+        request.query
+    )
+
     # Automatically extract and store memories
     pipeline = MemoryPipeline(db)
     pipeline.process_and_store(DEFAULT_USER_ID, request.query)
-
-    # Generate response using stored memories
-    response = MemoryService.generate_response(
-        db,
-        request.query
-    )
 
     return ChatResponse(
         response=response
@@ -150,6 +194,7 @@ def get_memory_endpoint(
 ):
     memory = get_memory(
         db,
+        DEFAULT_USER_ID,
         memory_id
     )
 
@@ -172,6 +217,7 @@ def update_memory_endpoint(
 ):
     updated = update_memory(
         db,
+        DEFAULT_USER_ID,
         memory_id,
         memory.category,
         memory.content,
@@ -193,6 +239,7 @@ def delete_memory_endpoint(
 ):
     memory = delete_memory(
         db,
+        DEFAULT_USER_ID,
         memory_id
     )
 
@@ -211,7 +258,7 @@ def restore_memory_endpoint(
     memory_id: int,
     db: Session = Depends(get_db)
 ):
-    memory = restore_memory(db, memory_id)
+    memory = restore_memory(db, DEFAULT_USER_ID, memory_id)
 
     if not memory:
         raise HTTPException(

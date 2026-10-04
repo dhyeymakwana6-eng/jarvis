@@ -1,16 +1,18 @@
+from .keywords import contains_any
+
+
 class MemoryScorer:
     """
     Assign importance scores to memories.
     """
 
     def score(self, memory: str) -> float:
-        memory_lower = memory.lower()
-
         score = 0.5
 
         # Critical project information
-        if any(keyword in memory_lower for keyword in [
+        if contains_any(memory, [
             "project",
+            "projects",
             "building",
             "developing",
             "creating"
@@ -18,8 +20,9 @@ class MemoryScorer:
             score += 0.4
 
         # Education information
-        if any(keyword in memory_lower for keyword in [
+        if contains_any(memory, [
             "study",
+            "studying",
             "student",
             "college",
             "university",
@@ -28,7 +31,7 @@ class MemoryScorer:
             score += 0.3
 
         # Goals and ambitions
-        if any(keyword in memory_lower for keyword in [
+        if contains_any(memory, [
             "goal",
             "want to",
             "plan to",
@@ -37,9 +40,11 @@ class MemoryScorer:
             score += 0.2
 
         # Preferences are useful but less critical
-        if any(keyword in memory_lower for keyword in [
+        if contains_any(memory, [
             "like",
+            "likes",
             "love",
+            "loves",
             "prefer",
             "favorite"
         ]):

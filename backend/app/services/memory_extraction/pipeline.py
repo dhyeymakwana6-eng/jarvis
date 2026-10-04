@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.crud.memory import create_memory, update_memory
+from app.services.embedding_service import EmbeddingService
 from .extractor import MemoryExtractor
 from .classifier import MemoryClassifier
 from .scorer import MemoryScorer
@@ -35,11 +36,17 @@ class MemoryPipeline:
                 "importance": importance,
             }
 
+            # Embedded once here and reused for dedup and storage.
+            embedding = EmbeddingService.try_generate(candidate)
+
             deduplication_result = self.deduplicator.process(
                 self.db,
                 user_id,
-                memory_data
+                memory_data,
+                embedding
             )
+
+            memory_data["embedding"] = embedding
 
             memory_data["deduplication"] = (
                 deduplication_result.model_dump()
@@ -58,13 +65,19 @@ class MemoryPipeline:
             decision = memory["deduplication"]["decision"]
             importance_scaled = int(memory["importance"] * 100)
 
-            if decision == DeduplicationDecision.NEW:
+            # SIMILAR means "related but possibly a different fact"
+            # (e.g. a new employer), so it's stored rather than dropped.
+            if decision in (
+                DeduplicationDecision.NEW,
+                DeduplicationDecision.SIMILAR
+            ):
                 stored = create_memory(
                     db=self.db,
                     user_id=user_id,
                     category=memory["category"],
                     content=memory["content"],
-                    importance=importance_scaled
+                    importance=importance_scaled,
+                    embedding=memory["embedding"]
                 )
                 stored_memories.append(stored)
 
@@ -72,17 +85,18 @@ class MemoryPipeline:
                 existing_id = memory["deduplication"]["existing_memory_id"]
                 stored = update_memory(
                     db=self.db,
+                    user_id=user_id,
                     memory_id=existing_id,
                     category=memory["category"],
                     content=memory["content"],
-                    importance=importance_scaled
+                    importance=importance_scaled,
+                    embedding=memory["embedding"]
                 )
                 stored_memories.append(stored)
 
-            # DUPLICATE / SIMILAR / CONFLICT: don't store anything new.
-            # SIMILAR and CONFLICT aren't produced yet (semantic_match
-            # isn't implemented), but skipping storage here keeps the
-            # behavior correct once that lands, rather than silently
-            # storing duplicates.
+            # DUPLICATE / CONFLICT: don't store anything new.
+            # CONFLICT isn't produced yet, but skipping storage here
+            # keeps the behavior correct once it lands, rather than
+            # silently storing contradictory memories.
 
         return stored_memories
