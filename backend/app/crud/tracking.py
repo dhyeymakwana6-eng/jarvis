@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models.project import Project
 from app.models.goal import Goal
+from app.crud.task import get_tasks
 
 
 def _apply_status(item, status: str | None):
@@ -112,7 +113,7 @@ def update_project(
 
 
 def delete_project(db: Session, user_id: int, project_id: int) -> Project | None:
-    """Soft delete. Its goals are kept but unlinked from it."""
+    """Soft delete. Its goals and tasks are kept but unlinked from it."""
     project = get_project(db, user_id, project_id)
 
     if project is None:
@@ -122,6 +123,9 @@ def delete_project(db: Session, user_id: int, project_id: int) -> Project | None
 
     for goal in get_goals(db, user_id, project_id=project_id):
         goal.project_id = None
+
+    for task in get_tasks(db, user_id, project_id=project_id):
+        task.project_id = None
 
     db.commit()
 

@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from app.api.memory import router as memory_router
 from app.api.profile import router as profile_router
 from app.api.tracking import projects_router, goals_router
+from app.api.task import router as task_router, reminders_router
 from app.services.memory_extraction.pipeline import MemoryPipeline
 from app.database.connection import SessionLocal
 from app.database.seed import ensure_default_user
@@ -42,6 +43,8 @@ app.include_router(memory_router)
 app.include_router(profile_router)
 app.include_router(projects_router)
 app.include_router(goals_router)
+app.include_router(task_router)
+app.include_router(reminders_router)
 
 
 @app.get("/")

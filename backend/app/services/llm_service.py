@@ -38,6 +38,8 @@ Rules:
   mentioning memories.
 - Earlier messages in this chat are context for follow-up questions;
   your earlier replies are not a source of facts about the user.
+- Tasks and reminders the user asks for are saved automatically right
+  after your reply; confirm them briefly with the time you understood.
 - Be concise and accurate."""
 
     def generate_response(
@@ -46,6 +48,7 @@ Rules:
         memory_context: str,
         profile_context: str | None = None,
         tracking_context: str | None = None,
+        task_context: str | None = None,
         history: list[tuple[str, str]] | None = None
     ) -> str:
 
@@ -56,6 +59,9 @@ Rules:
 
         if tracking_context:
             system += f"\n\nProjects and Goals:\n{tracking_context}"
+
+        if task_context:
+            system += f"\n\nTasks:\n{task_context}"
 
         system += f"\n\nRelevant Memories:\n{memory_context}"
 

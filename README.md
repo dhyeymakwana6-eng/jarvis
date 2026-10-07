@@ -30,7 +30,7 @@ python -m venv venv && source venv/bin/activate
 pip install -r requirements-dev.txt
 echo 'DATABASE_URL=postgresql+psycopg://USER:PASS@localhost:5432/jarvis' > .env
 python -m app.models.create_tables   # tables + default user
-python -m app.models.migrate         # extensions, indexes, embeddings
+python -m app.models.migrate         # new tables/columns, indexes, embeddings
 python -m pytest                     # optional
 
 # Frontend
@@ -73,6 +73,12 @@ Optional backend environment: `LLM_MODEL` (default `qwen3.5:9b`),
   follow-ups like "and the second one?" work. A conversation ends after
   30 minutes of silence; the panel reloads it on refresh or on another
   device. Older chats still count through long-term memory.
+- Tasks and reminders come from chat too: "remind me to call mom at 5",
+  "I need to submit the report by Friday", "I called mom". Due
+  reminders pop up on the HUD (DONE / +10M / DISMISS) and flare the
+  orb; turn on ALERTS for browser notifications while the tab is in the
+  background (localhost or HTTPS only). Set `JARVIS_TIMEZONE` (e.g.
+  `Asia/Kolkata`) if the backend runs on a machine in another timezone.
 - Drag / scroll to spin and zoom the orb, `G` for webcam hand gestures,
   `R` to reset.
 - API docs: http://localhost:8000/docs

@@ -2,7 +2,8 @@
 Brings an existing database up to date with the current models.
 
 create_tables.py only creates missing tables; it never adds columns
-to tables that already exist. Every statement here is idempotent, so
+to tables that already exist. This script does both: it creates
+missing tables, then adds missing columns. Every statement here is idempotent, so
 this is safe to re-run. Run from backend/:
 
     python -m app.models.migrate            # schema + embed missing
@@ -16,7 +17,9 @@ import sys
 
 from sqlalchemy import text
 
+from app.database.base import Base
 from app.database.connection import engine, SessionLocal
+import app.models  # noqa: F401  (registers every model on Base)
 from app.database.seed import ensure_default_user
 from app.services.embedding_service import EmbeddingService
 
@@ -74,6 +77,9 @@ def backfill_embeddings(conn, reembed: bool = False):
 
 
 if __name__ == "__main__":
+    # New tables (e.g. tasks); existing ones are left alone.
+    Base.metadata.create_all(bind=engine)
+
     with engine.begin() as conn:
         for statement in STATEMENTS:
             conn.execute(text(statement))

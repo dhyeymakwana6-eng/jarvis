@@ -4,3 +4,4 @@ from .project import Project
 from .goal import Goal
 from .conversation import Conversation
 from .decision import Decision
+from .task import Task

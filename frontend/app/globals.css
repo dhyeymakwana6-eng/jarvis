@@ -383,3 +383,100 @@ body {
     display: none;
   }
 }
+
+/* ——— Reminders ——— */
+.hud-reminders {
+  top: 72px;
+  left: 24px;
+  width: min(320px, calc(100vw - 48px));
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  user-select: text;
+}
+
+.reminder-card {
+  padding: 10px 12px;
+  background: rgba(30, 14, 0, 0.75);
+  border: 1px solid #ffcc66;
+  border-radius: 4px;
+  backdrop-filter: blur(3px);
+  box-shadow:
+    0 0 18px rgba(255, 150, 30, 0.35),
+    0 0 12px rgba(255, 140, 20, 0.15) inset;
+  animation: reminder-in 0.35s ease-out, reminder-glow 2.4s ease-in-out 0.35s 3;
+}
+
+.reminder-high {
+  border-color: #ff7a33;
+}
+
+.reminder-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: #ffcc66;
+  opacity: 0.85;
+}
+
+.reminder-title {
+  margin: 6px 0 2px;
+  font-size: 15px;
+  color: #ffe2b0;
+  text-shadow: 0 0 8px rgba(255, 170, 48, 0.6);
+  overflow-wrap: anywhere;
+}
+
+.reminder-due {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  opacity: 0.7;
+}
+
+.reminder-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.reminder-actions .hud-btn {
+  flex: 1;
+  padding: 0 6px;
+  font-size: 13px;
+}
+
+@keyframes reminder-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+
+@keyframes reminder-glow {
+  50% {
+    box-shadow:
+      0 0 30px rgba(255, 170, 48, 0.7),
+      0 0 12px rgba(255, 140, 20, 0.25) inset;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reminder-card {
+    animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  /* Above the controls; the chat panel owns the top of the screen. */
+  .hud-reminders {
+    top: auto;
+    bottom: 132px;
+    left: 16px;
+    right: 16px;
+    width: auto;
+    max-height: 40vh;
+  }
+}

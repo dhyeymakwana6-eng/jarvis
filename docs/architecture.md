@@ -64,6 +64,8 @@ Database
 * Profile API
 * Projects API
 * Goals API
+* Tasks API
+* Reminders API (due / dismiss / snooze; clients poll every 30s)
 
 ### Memory Layer
 
@@ -82,7 +84,8 @@ Database
 * MemoryPipeline (extract → classify → score → deduplicate → store)
 * ConflictChecker (LLM: same / contradicts / compatible)
 * ProfileService
-* TrackingService (projects/goals from chat; chat context)
+* TrackingService (projects/goals/tasks from chat; chat context)
+* TaskService (task chat context; validated task changes from chat)
 * ConversationHistory (current session's turns from the conversations log)
 
 ---
@@ -99,6 +102,8 @@ MemoryRanker (hybrid: 0.6 semantic, 0.25 keyword, 0.15 decayed importance)
 ↓
 ContextBuilder (top 10) + ProfileService (cached profile)
   + TrackingService (open projects/goals, deadlines)
+  + TaskService (open tasks: overdue / today / upcoming / undated,
+    done today; local time, JARVIS_TIMEZONE overrides)
   + ConversationHistory (last 6 turns of the current session;
     a session ends after 30 min idle; capped at ~6k chars)
 ↓
@@ -111,7 +116,9 @@ Conversation logged (conversations table)
 Background task:
   MemoryPipeline stores new memories from the query
   (a contradicting memory supersedes the old one)
-  TrackingService creates/updates projects and goals the message states
+  TrackingService creates/updates projects, goals and tasks the message
+  states (task times come back as local "YYYY-MM-DD HH:MM" and are
+  validated: past reminders roll to tomorrow or are dropped)
   ↓
   ProfileService rebuilds the profile if memories changed
   Conversation marked memories_processed
@@ -290,7 +297,7 @@ The architecture should support future additions including:
 
 ✅ Goal & Project Tracking
 
-⏳ Task Management
+✅ Task Management & Reminders
 
 ⏳ Voice System
 

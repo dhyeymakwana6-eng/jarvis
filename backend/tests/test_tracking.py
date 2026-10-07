@@ -21,6 +21,8 @@ def changes(**lists):
         new_goals=lists.get("new_goals", []),
         project_updates=lists.get("project_updates", []),
         goal_updates=lists.get("goal_updates", []),
+        new_tasks=lists.get("new_tasks", []),
+        task_updates=lists.get("task_updates", []),
     )
 
 
@@ -121,3 +123,9 @@ def test_projects_and_goals_api(client):
     assert client.delete(f"/projects/{project['id']}").status_code == 200
     assert client.get(f"/goals/{goal['id']}").json()["project_id"] is None
     assert client.get("/projects").json() == []
+
+
+def test_goal_dates_keep_the_day_of_a_full_timestamp():
+    assert TrackingService._parse_date("2026-10-08 20:00") == date(2026, 10, 8)
+    assert TrackingService._parse_date("2026-10-08") == date(2026, 10, 8)
+    assert TrackingService._parse_date("end of month") is None

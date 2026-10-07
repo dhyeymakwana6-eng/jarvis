@@ -1,8 +1,10 @@
-from datetime import date
+import re
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.clock import local_now
 from app.crud.tracking import (
     create_project,
     get_projects,
@@ -18,6 +20,7 @@ from app.crud.tracking import (
 from app.models.goal import Goal
 from app.schemas.tracking import Status
 from app.services.llm_service import LLMService
+from app.services.task_service import TaskService, NewTask, TaskChange
 
 
 # ---------- LLM output schema ----------
@@ -56,6 +59,8 @@ class TrackingChanges(BaseModel):
     new_goals: list[NewGoal]
     project_updates: list[ProjectChange]
     goal_updates: list[GoalChange]
+    new_tasks: list[NewTask]
+    task_updates: list[TaskChange]
 
 
 class TrackingService:
@@ -64,17 +69,23 @@ class TrackingService:
     and renders them as context for the chat prompt.
     """
 
-    SYSTEM_PROMPT = """You track a user's projects and goals for their personal assistant.
-Given the user's message and their current projects and goals, record only the changes the message clearly states. Leave every list empty if it states none; questions and small talk change nothing.
+    SYSTEM_PROMPT = """You track a user's projects, goals and tasks for their personal assistant.
+Given the user's message and their current projects, goals and tasks, record only the changes the message clearly states. Leave every list empty if it states none; questions and small talk change nothing.
 - new_projects: a new, named piece of work the user started that is not already listed.
 - new_goals: a new objective or target. It is new if its objective differs from every listed goal, even within the same project. Set project_id when it belongs to a listed project, or project_name when it belongs to a project in new_projects.
   Example: with goal "Deploy Jarvis on a Raspberry Pi" listed, "I want to finish the Jarvis voice system by Friday" is a NEW goal (a different objective in the same project), not an update.
   Projects have no deadlines: a target or deadline about a project ("I want to deploy Jarvis by November") is a NEW goal linked to that project.
-- project_updates / goal_updates: changes to a LISTED item, by its id. Set only the fields the message changes (status, next_action, progress, target_date).
+- project_updates / goal_updates: changes to a LISTED item, by its id. Set only the fields the message changes (status, next_action, progress, target_date). Update a goal only when the message is about that goal's own objective; sharing a project name is not enough ("finish the Jarvis tests" is not the goal "Deploy Jarvis on a Raspberry Pi").
+  progress is a percentage the message states or implies ("halfway" = 50, "almost done" = 90, "just started" = 10); leave it null otherwise, never 0 by default.
   next_action is the next step the user says they need to take on a project ("Next for Jarvis I need to add reminders" -> next_action "Add reminders").
-Statuses: completed = finished or done; abandoned = gave up, dropped, cancelled or stopped for good; paused = on hold or postponed; active = started again or in progress.
+- new_tasks: a single concrete action the user must do or asks to be reminded about ("remind me to call mom at 5", "I need to submit the report by Friday"). A goal is a larger outcome worked towards over weeks or months; a task is one action, and anything due within a few days is a task. title is the action without the time ("Call mom").
+  A project step WITH a deadline is a task linked to the project ("For Jarvis I need to write the reminder UI by Friday" -> new task "Write the reminder UI" with project_id of Jarvis and due_at = that Friday's date); without a deadline it is only next_action.
+  "Remind me ..." sets remind_at. Whenever the message states a deadline ("by Friday", "before tomorrow evening", "due Monday"), always set due_at. Set priority only if the user says it is urgent/important (high) or unimportant (low).
+- task_updates: changes to a LISTED task by its id. Done/finished/called/sent it -> status done; cancel/never mind/no longer needed -> status cancelled; a new time -> remind_at or due_at.
+Statuses: completed = finished or done; abandoned = gave up, dropped, cancelled or stopped for good; paused = on hold or postponed; active = started again or in progress. Task statuses are only todo, done and cancelled.
 Never re-create a listed item.
-Convert relative dates to YYYY-MM-DD from today's date. "By <month>" or "this month/year" means the last day of that period. Leave target_date null if no time is stated."""
+Convert relative dates to YYYY-MM-DD from Now. "By <month>" or "this month/year" means the last day of that period. Leave target_date null if no time is stated.
+Task times (due_at, remind_at) are local times "YYYY-MM-DD HH:MM" computed from Now: "in 20 minutes" adds to Now; "at 5" is the next 5 o'clock still ahead, read as daytime (17:00); "tonight" is 20:00, "this evening" 18:00, "tomorrow morning" 09:00; a day with no time is that date only ("YYYY-MM-DD")."""
 
     # ---------- Prompt state ----------
 
@@ -94,9 +105,10 @@ Convert relative dates to YYYY-MM-DD from today's date. "By <month>" or "this mo
         return f"- [{goal.id}] {goal.title} ({', '.join(details)})"
 
     @staticmethod
-    def state_text(db: Session, user_id: int, today: date) -> str:
-        """Everything the tracker LLM needs: today's date and all items with ids."""
-        lines = [f"Today: {today.isoformat()} ({today.strftime('%A')})", "Projects:"]
+    def state_text(db: Session, user_id: int, now: datetime) -> str:
+        """Everything the tracker LLM needs: the local time and all open items with ids."""
+        today = now.date()
+        lines = [f"Now: {now.strftime('%Y-%m-%d %H:%M')} ({now.strftime('%A')})", "Projects:"]
 
         projects = get_projects(db, user_id)
         for project in projects:
@@ -114,6 +126,8 @@ Convert relative dates to YYYY-MM-DD from today's date. "By <month>" or "this mo
         if not goals:
             lines.append("(none)")
 
+        lines.extend(TaskService.state_lines(db, user_id, now))
+
         return "\n".join(lines)
 
     # ---------- Applying changes ----------
@@ -124,7 +138,8 @@ Convert relative dates to YYYY-MM-DD from today's date. "By <month>" or "this mo
             return None
 
         try:
-            return date.fromisoformat(value)
+            # Keep the date of a full timestamp ("2026-10-08 20:00").
+            return date.fromisoformat(value.strip()[:10])
         except ValueError:
             return None
 
@@ -132,7 +147,8 @@ Convert relative dates to YYYY-MM-DD from today's date. "By <month>" or "this mo
     def apply(
         db: Session,
         user_id: int,
-        changes: TrackingChanges
+        changes: TrackingChanges,
+        now: datetime | None = None
     ) -> list[str]:
         """
         Applies LLM-proposed changes after validating them: ids must
@@ -209,41 +225,63 @@ Convert relative dates to YYYY-MM-DD from today's date. "By <month>" or "this mo
             if fields and update_goal(db, user_id, change.id, fields):
                 log.append(f"updated goal {change.id}: {fields}")
 
+        log.extend(TaskService.apply_changes(
+            db,
+            user_id,
+            changes.new_tasks,
+            changes.task_updates,
+            created_projects,
+            now or local_now()
+        ))
+
         return log
+
+    # Phrased as a question but asking for something to be done.
+    REQUEST = re.compile(
+        r"^\s*(?:can|could|will|would)\s+you\b|^\s*please\b|\bremind me\b",
+        re.IGNORECASE
+    )
+
+    @staticmethod
+    def is_question(message: str) -> bool:
+        """
+        Plain questions change nothing, so they skip the LLM call.
+        "Can you remind me to call mom at 5?" is a request, not a question.
+        """
+        message = message.strip()
+
+        return message.endswith("?") and not TrackingService.REQUEST.search(message)
 
     @staticmethod
     def process_message(
         db: Session,
         user_id: int,
         message: str,
-        today: date | None = None
+        now: datetime | None = None
     ) -> list[str]:
-        """
-        Asks the LLM what the message changes and applies it. Questions
-        are skipped without an LLM call; they never change anything.
-        """
-        if message.strip().endswith("?"):
+        """Asks the LLM what the message changes and applies it."""
+        if TrackingService.is_question(message):
             return []
 
-        today = today or date.today()
+        now = now or local_now()
 
         changes = LLMService().generate_structured(
             TrackingService.SYSTEM_PROMPT,
-            f"{TrackingService.state_text(db, user_id, today)}\n\nUser message: {message}",
+            f"{TrackingService.state_text(db, user_id, now)}\n\nUser message: {message}",
             TrackingChanges
         )
 
         if changes is None:
             return []
 
-        return TrackingService.apply(db, user_id, changes)
+        return TrackingService.apply(db, user_id, changes, now)
 
     # ---------- Chat context ----------
 
     @staticmethod
     def to_context(db: Session, user_id: int, today: date | None = None) -> str | None:
         """Active/paused projects and open goals, for the chat prompt."""
-        today = today or date.today()
+        today = today or local_now().date()
 
         projects = get_projects(db, user_id)
         project_names = {project.id: project.name for project in projects}

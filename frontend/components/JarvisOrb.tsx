@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createOrbScene, type OrbSceneApi } from "@/lib/orbScene";
 import { HandTracker, type TrackerStatus } from "@/lib/handTracker";
 import ChatPanel from "@/components/ChatPanel";
+import ReminderCenter from "@/components/ReminderCenter";
 
 type CameraState = "off" | "starting" | "on" | "error";
 
@@ -23,6 +24,44 @@ export default function JarvisOrb() {
   const [camera, setCamera] = useState<CameraState>("off");
   const [status, setStatus] = useState<TrackerStatus>({ hands: 0, mode: "idle" });
   const [error, setError] = useState<string | null>(null);
+
+  // The orb spins up while Jarvis is thinking or a reminder just fired.
+  const busy = useRef({ chat: false, alert: false });
+  const alertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const updateOrb = () => sceneRef.current?.setThinking(busy.current.chat || busy.current.alert);
+  const setChatThinking = useCallback((thinking: boolean) => {
+    busy.current.chat = thinking;
+    updateOrb();
+  }, []);
+  const flareForReminder = useCallback(() => {
+    busy.current.alert = true;
+    updateOrb();
+    if (alertTimer.current) clearTimeout(alertTimer.current);
+    alertTimer.current = setTimeout(() => {
+      busy.current.alert = false;
+      updateOrb();
+    }, 3000);
+  }, []);
+  useEffect(() => () => {
+    if (alertTimer.current) clearTimeout(alertTimer.current);
+  }, []);
+
+  // Browser notifications need a secure context (localhost or HTTPS).
+  const [notifySupported, setNotifySupported] = useState(false);
+  const [notifyOn, setNotifyOn] = useState(false);
+  useEffect(() => {
+    const supported = "Notification" in window && window.isSecureContext;
+    setNotifySupported(supported);
+    setNotifyOn(supported && Notification.permission === "granted");
+  }, []);
+  const toggleNotifications = useCallback(async () => {
+    if (notifyOn) {
+      setNotifyOn(false);
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    setNotifyOn(permission === "granted");
+  }, [notifyOn]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -123,7 +162,9 @@ export default function JarvisOrb() {
 
       <div className="hud hud-title">J.A.R.V.I.S.</div>
 
-      <ChatPanel onThinkingChange={(thinking) => sceneRef.current?.setThinking(thinking)} />
+      <ChatPanel onThinkingChange={setChatThinking} />
+
+      <ReminderCenter onAlert={flareForReminder} notify={notifyOn} />
 
       <div className="hud hud-hint">
         <div>
@@ -160,6 +201,17 @@ export default function JarvisOrb() {
         {error && <div className="hud-error">{error}</div>}
 
         <div className="hud-row">
+          {notifySupported && (
+            <button
+              type="button"
+              className="hud-btn"
+              aria-pressed={notifyOn}
+              onClick={() => void toggleNotifications()}
+              title="Browser notifications for reminders while this tab is in the background"
+            >
+              {notifyOn ? "ALERTS ON" : "ALERTS OFF"}
+            </button>
+          )}
           <button
             type="button"
             className="hud-btn"

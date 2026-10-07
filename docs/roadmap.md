@@ -186,7 +186,23 @@ Status: Complete
 
 ## Phase 14 — Task & Reminder System
 
-Status: Not Started
+Status: Complete
+
+### Task 1 — Task Model and /tasks API (due/remind times, priority, soft delete)
+
+Status: Complete
+
+### Task 2 — Tasks in Chat Context (due today, overdue)
+
+Status: Complete
+
+### Task 3 — Tasks and Reminders from Chat (LLM, validated)
+
+Status: Complete
+
+### Task 4 — Reminder Delivery (orb HUD + browser notification)
+
+Status: Complete
 
 ## Phase 15 — Decision Engine
 

@@ -65,3 +65,36 @@ export async function getHistory(): Promise<ChatTurn[]> {
   if (!res.ok) throw new JarvisError(await detail(res));
   return (await res.json()) as ChatTurn[];
 }
+
+export interface Task {
+  id: number;
+  title: string;
+  notes: string | null;
+  priority: "low" | "normal" | "high";
+  due_at: string | null;
+  remind_at: string | null;
+}
+
+async function post(path: string, body?: unknown, method = "POST"): Promise<void> {
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  // 404: another device already handled it — nothing left to do.
+  if (!res.ok && res.status !== 404) throw new JarvisError(await detail(res));
+}
+
+/** Reminders whose time has passed and that no device has handled yet. */
+export async function getDueReminders(): Promise<Task[]> {
+  const res = await fetch(`${BASE}/reminders/due`, { cache: "no-store" });
+  if (!res.ok) throw new JarvisError(await detail(res));
+  return (await res.json()) as Task[];
+}
+
+export const dismissReminder = (id: number) => post(`/reminders/${id}/dismiss`);
+
+export const snoozeReminder = (id: number, minutes: number) =>
+  post(`/reminders/${id}/snooze`, { minutes });
+
+export const completeTask = (id: number) => post(`/tasks/${id}`, { status: "done" }, "PATCH");
