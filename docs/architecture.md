@@ -16,6 +16,11 @@ Database
 
 ## Technology Stack
 
+### Frontend
+
+* Next.js + Three.js orb UI (frontend/)
+* Chat panel calling /memory/chat through a Next.js proxy
+
 ### Backend
 
 * FastAPI
