@@ -69,6 +69,10 @@ Optional backend environment: `LLM_MODEL` (default `qwen3.5:9b`),
 - Type in the COMMS panel (or press `/`). Statements like "I'm building
   X" or "I want to finish Y by Friday" are remembered and turned into
   projects/goals in the background; the orb speeds up while Jarvis thinks.
+- Jarvis follows the current conversation (its last 6 turns), so
+  follow-ups like "and the second one?" work. A conversation ends after
+  30 minutes of silence; the panel reloads it on refresh or on another
+  device. Older chats still count through long-term memory.
 - Drag / scroll to spin and zoom the orb, `G` for webcam hand gestures,
   `R` to reset.
 - API docs: http://localhost:8000/docs

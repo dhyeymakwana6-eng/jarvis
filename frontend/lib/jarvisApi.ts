@@ -48,3 +48,20 @@ export async function chat(query: string, signal?: AbortSignal): Promise<string>
   const body = (await res.json()) as { response: string };
   return body.response;
 }
+
+export interface ChatTurn {
+  id: number;
+  user_message: string;
+  assistant_message: string;
+  created_at: string;
+}
+
+/**
+ * The current chat session (turns since the last 30 min of silence),
+ * oldest first — the same turns Jarvis sees as context.
+ */
+export async function getHistory(): Promise<ChatTurn[]> {
+  const res = await fetch(`${BASE}/memory/chat/history`, { cache: "no-store" });
+  if (!res.ok) throw new JarvisError(await detail(res));
+  return (await res.json()) as ChatTurn[];
+}

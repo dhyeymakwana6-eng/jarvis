@@ -83,6 +83,7 @@ Database
 * ConflictChecker (LLM: same / contradicts / compatible)
 * ProfileService
 * TrackingService (projects/goals from chat; chat context)
+* ConversationHistory (current session's turns from the conversations log)
 
 ---
 
@@ -98,6 +99,8 @@ MemoryRanker (hybrid: 0.6 semantic, 0.25 keyword, 0.15 decayed importance)
 ↓
 ContextBuilder (top 10) + ProfileService (cached profile)
   + TrackingService (open projects/goals, deadlines)
+  + ConversationHistory (last 6 turns of the current session;
+    a session ends after 30 min idle; capped at ~6k chars)
 ↓
 LLMService
 ↓

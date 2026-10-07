@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { chat, isOnline, JarvisError } from "@/lib/jarvisApi";
+import { chat, getHistory, isOnline, JarvisError } from "@/lib/jarvisApi";
 
 interface Message {
   id: number;
@@ -28,9 +28,24 @@ export default function ChatPanel({ onThinkingChange }: ChatPanelProps) {
 
   useEffect(() => {
     let cancelled = false;
-    void isOnline().then((ok) => {
-      if (!cancelled) setOnline(ok);
-    });
+    // Restore the current session, so the panel shows what Jarvis
+    // will treat as context (also across reloads and devices).
+    getHistory()
+      .then((turns) => {
+        if (cancelled) return;
+        setOnline(true);
+        setMessages((prev) =>
+          prev.length > 0
+            ? prev
+            : turns.flatMap((t) => [
+                { id: nextId.current++, role: "user" as const, text: t.user_message },
+                { id: nextId.current++, role: "jarvis" as const, text: t.assistant_message },
+              ]),
+        );
+      })
+      .catch(async () => {
+        if (!cancelled) setOnline(await isOnline());
+      });
     return () => {
       cancelled = true;
       abortRef.current?.abort();

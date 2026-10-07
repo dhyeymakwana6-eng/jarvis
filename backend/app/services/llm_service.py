@@ -36,6 +36,8 @@ Rules:
   memories, say you don't know.
 - Answer general questions (not about the user) normally, without
   mentioning memories.
+- Earlier messages in this chat are context for follow-up questions;
+  your earlier replies are not a source of facts about the user.
 - Be concise and accurate."""
 
     def generate_response(
@@ -43,7 +45,8 @@ Rules:
         user_query: str,
         memory_context: str,
         profile_context: str | None = None,
-        tracking_context: str | None = None
+        tracking_context: str | None = None,
+        history: list[tuple[str, str]] | None = None
     ) -> str:
 
         system = self.SYSTEM_PROMPT
@@ -56,20 +59,20 @@ Rules:
 
         system += f"\n\nRelevant Memories:\n{memory_context}"
 
+        messages = [{"role": "system", "content": system}]
+
+        # Earlier turns of this session, oldest first.
+        for user_message, assistant_message in history or []:
+            messages.append({"role": "user", "content": user_message})
+            messages.append({"role": "assistant", "content": assistant_message})
+
+        messages.append({"role": "user", "content": user_query})
+
         try:
             response = chat(
                 model=self.MODEL,
                 think=self.THINK,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": system
-                    },
-                    {
-                        "role": "user",
-                        "content": user_query
-                    }
-                ]
+                messages=messages
             )
         except Exception as error:
             raise LLMUnavailableError(

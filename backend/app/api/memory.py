@@ -13,6 +13,8 @@ from app.services.embedding_service import EmbeddingService, EmbeddingError
 
 from app.services.llm_service import LLMUnavailableError
 
+from app.services.conversation_history import ConversationHistory
+
 from app.services.memory_extraction.pipeline import MemoryPipeline
 
 from app.schemas.memory import (
@@ -23,7 +25,8 @@ from app.schemas.memory import (
 )
 from app.schemas.chat import (
     ChatRequest,
-    ChatResponse
+    ChatResponse,
+    ChatTurn
 )
 
 from app.crud.memory import (
@@ -205,6 +208,22 @@ def chat_endpoint(
 
     return ChatResponse(
         response=response
+    )
+
+@router.get(
+    "/chat/history",
+    response_model=list[ChatTurn]
+)
+def chat_history_endpoint(
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db)
+):
+    # The current session (turns since the last 30 min of silence),
+    # oldest first. The LLM sees the last few of these.
+    return ConversationHistory.current_session(
+        db,
+        DEFAULT_USER_ID,
+        limit=limit
     )
 
 @router.get(

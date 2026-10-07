@@ -7,6 +7,7 @@ from app.services.llm_service import LLMService
 from app.services.embedding_service import EmbeddingService
 from app.services.profile_service import ProfileService
 from app.services.tracking_service import TrackingService
+from app.services.conversation_history import ConversationHistory
 
 class MemoryService:
 
@@ -100,5 +101,6 @@ class MemoryService:
             profile_context=ProfileService.to_context(
                 user.profile if user else None
             ),
-            tracking_context=TrackingService.to_context(db, user_id)
+            tracking_context=TrackingService.to_context(db, user_id),
+            history=ConversationHistory.for_prompt(db, user_id)
         )
