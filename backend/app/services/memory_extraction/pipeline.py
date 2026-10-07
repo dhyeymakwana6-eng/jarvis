@@ -131,8 +131,8 @@ class MemoryPipeline:
         LLM conflict checks) and project/goal tracking take seconds, so
         they run after the response is sent. Opens its own session because the request's session
         is closed by then. The conversation is only marked processed
-        on success, so a crash or restart leaves it for
-        process_pending() to retry.
+        on success, so a crash, restart or LLM outage leaves it for
+        process_pending() to retry at the next startup.
         """
         db = SessionLocal()
 

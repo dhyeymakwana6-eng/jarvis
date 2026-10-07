@@ -37,11 +37,16 @@ class MemoryExtractor:
 
     # "I am ..." / "I'm ..." followed by one of these describes a
     # passing state, not a lasting fact ("I'm tired", "I am not sure").
+    # going/trying/thinking are only transient when no plan follows:
+    # "I'm going to the gym" is, "I'm going to learn Rust" isn't.
     TRANSIENT_STATE = re.compile(
         r"\b(?:i am|i'm)\s+(?:so\s+|very\s+|really\s+|just\s+|a bit\s+|kind of\s+)?"
         r"(?:not sure|tired|sleepy|hungry|thirsty|bored|busy|sick|fine|ok|okay|"
         r"good|great|sorry|sure|back|here|done|ready|confused|stressed|"
-        r"excited|happy|sad|angry|late|going|trying|thinking|wondering|"
+        r"excited|happy|sad|angry|late|wondering|"
+        r"going(?!\s+to\s+(?!(?:the|a|an|my|bed|sleep)\b)\w)|"
+        r"trying(?!\s+to\s+\w)|"
+        r"thinking(?!\s+(?:about|of)\s+\w)|"
         r"curious|lost|stuck|free|available|away|home)\b",
         re.IGNORECASE
     )

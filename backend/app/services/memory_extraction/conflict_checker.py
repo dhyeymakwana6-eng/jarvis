@@ -17,6 +17,8 @@ class ConflictChecker:
     Uses the LLM to decide whether a new statement contradicts an
     existing memory. Only "contradicts" is acted on; "same" vs
     "compatible" mix-ups are harmless (the memory is just stored).
+    Raises LLMUnavailableError if the LLM is down, so the pipeline
+    leaves the conversation to be retried.
     """
 
     SYSTEM_PROMPT = """You compare two facts a user told their personal assistant at different times: an EXISTING memory and a NEW statement.
@@ -30,7 +32,7 @@ Only judge what is stated; do not assume."""
         self.llm = llm or LLMService()
 
     def check(self, existing: str, new: str) -> ConflictVerdict | None:
-        """None if the LLM is unavailable; callers treat that as no conflict."""
+        """None if the LLM gave unusable output; callers treat that as no conflict."""
         return self.llm.generate_structured(
             self.SYSTEM_PROMPT,
             f"EXISTING: {existing}\nNEW: {new}",

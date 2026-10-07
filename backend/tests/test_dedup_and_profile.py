@@ -90,3 +90,32 @@ def test_llm_structured_returns_none_on_bad_json(monkeypatch):
     monkeypatch.setattr("app.services.llm_service.chat", lambda **kwargs: Reply)
 
     assert LLMService().generate_structured("s", "u", ConflictVerdict) is None
+
+
+def test_ensure_default_user_creates_once(db):
+    from app.database.seed import ensure_default_user
+    from app.models.user import User
+
+    user_id = 999998
+    assert db.get(User, user_id) is None
+
+    created = ensure_default_user(db, user_id)
+    again = ensure_default_user(db, user_id)
+
+    assert created.id == again.id == user_id
+
+
+def test_llm_structured_raises_when_unreachable(monkeypatch):
+    import pytest
+    from app.services.llm_service import LLMUnavailableError
+
+    def down(**kwargs):
+        raise ConnectionError("Failed to connect to Ollama")
+
+    monkeypatch.setattr("app.services.llm_service.chat", down)
+
+    with pytest.raises(LLMUnavailableError):
+        LLMService().generate_structured("s", "u", ConflictVerdict)
+
+    with pytest.raises(LLMUnavailableError):
+        LLMService().generate_response("hi", "none")

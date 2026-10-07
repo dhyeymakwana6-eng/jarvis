@@ -6,7 +6,7 @@ from app.database.connection import SessionLocal
 from app.models.memory import Memory
 from app.models.user import User
 from app.schemas.profile import UserProfile
-from app.services.llm_service import LLMService
+from app.services.llm_service import LLMService, LLMUnavailableError
 
 
 class ProfileService:
@@ -48,7 +48,8 @@ In the summary, refer to the user by name or as "they"; never assume gender."""
     def rebuild(db: Session, user_id: int) -> UserProfile | None:
         """
         Rebuilds and saves the profile. Returns None (leaving the old
-        profile in place) if the user doesn't exist or the LLM fails.
+        profile in place) if the user doesn't exist or the LLM output
+        is unusable. Raises LLMUnavailableError if the LLM is down.
         """
         user = db.get(User, user_id)
 
@@ -112,6 +113,9 @@ In the summary, refer to the user by name or as "they"; never assume gender."""
 
             if user and user.profile_stale:
                 ProfileService.rebuild(db, user_id)
+        except LLMUnavailableError as error:
+            # Still marked stale, so the next refresh tries again.
+            print(f"WARNING: profile refresh skipped: {error}")
         finally:
             db.close()
 

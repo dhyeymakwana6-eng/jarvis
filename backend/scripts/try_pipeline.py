@@ -1,3 +1,8 @@
+"""
+Manual check: runs the extraction pipeline on a sample message and
+stores the result in the REAL database as the default user.
+Run from backend/:  python -m scripts.try_pipeline
+"""
 from app.core.constants import DEFAULT_USER_ID
 from app.database.connection import SessionLocal
 from app.services.memory_extraction.pipeline import MemoryPipeline

@@ -17,7 +17,8 @@ class MemoryService:
     def get_relevant_memories(
         db: Session,
         user_id: int,
-        query: str
+        query: str,
+        record_access: bool = True
     ):
 
         keyword_matches = MemoryRetriever.retrieve(
@@ -52,7 +53,8 @@ class MemoryService:
 
         # Only memories that actually make it into the context count
         # as accessed, not every candidate the retriever returned.
-        MemoryRetriever.record_access(db, ranked_memories)
+        if record_access:
+            MemoryRetriever.record_access(db, ranked_memories)
 
         return ranked_memories
 
@@ -60,13 +62,15 @@ class MemoryService:
     def get_context(
         db: Session,
         user_id: int,
-        query: str
+        query: str,
+        record_access: bool = True
     ):
 
         ranked_memories = MemoryService.get_relevant_memories(
             db,
             user_id,
-            query
+            query,
+            record_access
         )
 
         return ContextBuilder.build(

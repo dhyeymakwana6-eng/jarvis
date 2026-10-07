@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database.connection import get_db
@@ -10,6 +10,8 @@ from app.services.memory_service import MemoryService
 from app.services.memory_retriever import MemoryRetriever
 
 from app.services.embedding_service import EmbeddingService, EmbeddingError
+
+from app.services.llm_service import LLMUnavailableError
 
 from app.services.memory_extraction.pipeline import MemoryPipeline
 
@@ -64,8 +66,8 @@ def create_memory_endpoint(
 def get_all_memories(
     category: str = None,
     min_importance: int = None,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     include_deleted: bool = False,
     db: Session = Depends(get_db)
 ):
@@ -99,7 +101,7 @@ def search_memory_endpoint(
 )
 def semantic_search_endpoint(
     q: str,
-    limit: int = 10,
+    limit: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db)
 ):
     try:
@@ -150,10 +152,12 @@ def get_memory_context(
     query: str,
     db: Session = Depends(get_db)
 ):
+    # Debug endpoint, like /test-retrieve: don't record accesses.
     context = MemoryService.get_context(
         db,
         DEFAULT_USER_ID,
-        query
+        query,
+        record_access=False
     )
 
     return {
@@ -171,11 +175,17 @@ def chat_endpoint(
 ):
     # Retrieve context before storing this message, so the user's
     # own message isn't fed back to the LLM as a "known fact".
-    response = MemoryService.generate_response(
-        db,
-        DEFAULT_USER_ID,
-        request.query
-    )
+    try:
+        response = MemoryService.generate_response(
+            db,
+            DEFAULT_USER_ID,
+            request.query
+        )
+    except LLMUnavailableError as error:
+        raise HTTPException(
+            status_code=503,
+            detail=str(error)
+        )
 
     # Log the turn first, then extract/store memories and refresh the
     # profile after the response is sent (conflict checks take a few

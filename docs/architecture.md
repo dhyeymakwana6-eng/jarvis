@@ -124,8 +124,13 @@ transaction and skip if Postgres is down; none need Ollama):
 From backend/: `python -m app.models.migrate` (idempotent).
 Add `--reembed` after changing the embedding model or prefixes.
 
+The default user (DEFAULT_USER_ID) is created on startup and by
+create_tables / migrate if missing.
+
 If Ollama embeddings are unavailable, retrieval falls back to
-keyword-only ranking.
+keyword-only ranking. If the chat LLM is unreachable, /memory/chat
+returns 503, and background extraction leaves the conversation
+unprocessed so it is retried at the next startup.
 
 ---
 
@@ -267,13 +272,15 @@ The architecture should support future additions including:
 
 ✅ Memory Service Implemented
 
-⏳ Local LLM Integration (Ollama)
+✅ Local LLM Integration (Ollama)
 
-⏳ Automatic Memory Extraction
+✅ Automatic Memory Extraction
 
-⏳ User Profile Engine
+✅ Semantic Search (pgvector)
 
-⏳ Goal & Project Tracking
+✅ User Profile Engine
+
+✅ Goal & Project Tracking
 
 ⏳ Task Management
 

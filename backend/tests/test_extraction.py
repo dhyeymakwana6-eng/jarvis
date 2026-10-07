@@ -32,6 +32,10 @@ def test_skips_questions_and_unrelated_sentences(extractor):
     "I'm not sure.",
     "I am so bored today.",
     "I'm going to the gym.",
+    "I'm going home.",
+    "I'm going to bed.",
+    "I'm just thinking.",
+    "I'm trying.",
 ])
 def test_skips_transient_states(extractor, message):
     assert extractor.extract(message) == []
@@ -41,6 +45,9 @@ def test_skips_transient_states(extractor, message):
     "I'm tired but I work at Google.",
     "I am a mechanical engineering student.",
     "I'm learning Rust.",
+    "I'm going to learn Rust this year.",
+    "I'm trying to build a drone.",
+    "I'm thinking about switching to CS.",
 ])
 def test_keeps_lasting_facts(extractor, message):
     assert extractor.extract(message) == [message]

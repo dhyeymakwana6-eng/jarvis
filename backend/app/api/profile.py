@@ -5,6 +5,7 @@ from app.database.connection import get_db
 from app.core.constants import DEFAULT_USER_ID
 
 from app.services.profile_service import ProfileService
+from app.services.llm_service import LLMUnavailableError
 
 from app.schemas.profile import ProfileResponse
 
@@ -55,10 +56,18 @@ def rebuild_profile(
             detail="User not found"
         )
 
-    if ProfileService.rebuild(db, DEFAULT_USER_ID) is None:
+    try:
+        profile = ProfileService.rebuild(db, DEFAULT_USER_ID)
+    except LLMUnavailableError as error:
         raise HTTPException(
             status_code=503,
-            detail="Profile rebuild failed; the LLM may be unavailable"
+            detail=str(error)
+        )
+
+    if profile is None:
+        raise HTTPException(
+            status_code=502,
+            detail="Profile rebuild failed; the LLM returned invalid output"
         )
 
     db.refresh(user)

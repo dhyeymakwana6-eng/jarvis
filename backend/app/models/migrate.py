@@ -16,7 +16,8 @@ import sys
 
 from sqlalchemy import text
 
-from app.database.connection import engine
+from app.database.connection import engine, SessionLocal
+from app.database.seed import ensure_default_user
 from app.services.embedding_service import EmbeddingService
 
 
@@ -76,6 +77,9 @@ if __name__ == "__main__":
     with engine.begin() as conn:
         for statement in STATEMENTS:
             conn.execute(text(statement))
+
+    with SessionLocal() as db:
+        ensure_default_user(db)
 
     print("Schema up to date.")
 

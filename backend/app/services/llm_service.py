@@ -2,10 +2,14 @@ import os
 from typing import TypeVar
 
 from ollama import chat
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 
 T = TypeVar("T", bound=BaseModel)
+
+
+class LLMUnavailableError(Exception):
+    """Ollama couldn't be reached or failed to run the model."""
 
 
 class LLMService:
@@ -52,20 +56,25 @@ Rules:
 
         system += f"\n\nRelevant Memories:\n{memory_context}"
 
-        response = chat(
-            model=self.MODEL,
-            think=self.THINK,
-            messages=[
-                {
-                    "role": "system",
-                    "content": system
-                },
-                {
-                    "role": "user",
-                    "content": user_query
-                }
-            ]
-        )
+        try:
+            response = chat(
+                model=self.MODEL,
+                think=self.THINK,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": system
+                    },
+                    {
+                        "role": "user",
+                        "content": user_query
+                    }
+                ]
+            )
+        except Exception as error:
+            raise LLMUnavailableError(
+                f"LLM call failed ({self.MODEL}): {error}"
+            ) from error
 
         content = (response.message.content or "").strip()
 
@@ -80,9 +89,10 @@ Rules:
     ) -> T | None:
         """
         Asks the model for JSON matching response_model's schema
-        (Ollama structured outputs). Returns None if the model is
-        unreachable or the output doesn't validate, so callers can
-        fall back instead of failing the request.
+        (Ollama structured outputs). Returns None if the output doesn't
+        validate, so callers can skip it. Raises LLMUnavailableError if
+        the model can't be reached, so callers can retry later instead
+        of losing the work.
         """
         try:
             response = chat(
@@ -95,9 +105,13 @@ Rules:
                     {"role": "user", "content": user_content}
                 ]
             )
-
-            return response_model.model_validate_json(response.message.content)
-
         except Exception as error:
-            print(f"WARNING: structured generation failed: {error}")
+            raise LLMUnavailableError(
+                f"LLM call failed ({self.MODEL}): {error}"
+            ) from error
+
+        try:
+            return response_model.model_validate_json(response.message.content or "")
+        except ValidationError as error:
+            print(f"WARNING: structured generation returned invalid output: {error}")
             return None

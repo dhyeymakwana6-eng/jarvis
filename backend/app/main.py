@@ -10,10 +10,19 @@ from app.api.memory import router as memory_router
 from app.api.profile import router as profile_router
 from app.api.tracking import projects_router, goals_router
 from app.services.memory_extraction.pipeline import MemoryPipeline
+from app.database.connection import SessionLocal
+from app.database.seed import ensure_default_user
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    try:
+        with SessionLocal() as db:
+            ensure_default_user(db)
+    except Exception as error:
+        # Don't block startup; requests will report the DB problem.
+        print(f"WARNING: could not ensure default user: {error}")
+
     # Finish memory extraction interrupted by a previous shutdown.
     # A daemon thread, so startup isn't blocked on LLM calls.
     threading.Thread(
