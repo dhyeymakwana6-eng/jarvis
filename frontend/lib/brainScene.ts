@@ -382,6 +382,11 @@ export function createBrainScene(container: HTMLElement): OrbSceneApi {
     thinking = value;
   }
 
+  let voiceLevel = 0;
+  function setVoiceLevel(level: number) {
+    voiceLevel = level;
+  }
+
   function animate(timestamp?: number) {
     if (disposed) return;
     rafId = requestAnimationFrame(animate);
@@ -391,7 +396,8 @@ export function createBrainScene(container: HTMLElement): OrbSceneApi {
     intensity += ((thinking ? 1 : 0) - intensity) * Math.min(1, dt * 2.5);
 
     const lerp = (a: number, b: number) => a + (b - a) * intensity;
-    const spawnRate = lerp(IDLE.spawnPerSecond, THINKING.spawnPerSecond);
+    // Speaking makes the network fire with the voice.
+    const spawnRate = lerp(IDLE.spawnPerSecond, THINKING.spawnPerSecond) + voiceLevel * 60;
     const chainChance = lerp(IDLE.chainChance, THINKING.chainChance);
     const speed = lerp(IDLE.pulseSpeed, THINKING.pulseSpeed);
 
@@ -450,8 +456,8 @@ export function createBrainScene(container: HTMLElement): OrbSceneApi {
     dustPoints.rotation.y += dt * 0.01;
 
     const heartbeat = Math.pow(Math.max(0, Math.sin(t * (1.1 + intensity * 1.6))), 6);
-    (core.material as THREE.SpriteMaterial).opacity = 0.12 + heartbeat * 0.12 + intensity * 0.12;
-    bloom.strength = 1.35 + heartbeat * 0.25 + intensity * 0.25;
+    (core.material as THREE.SpriteMaterial).opacity = 0.12 + heartbeat * 0.12 + intensity * 0.12 + voiceLevel * 0.35;
+    bloom.strength = 1.35 + heartbeat * 0.25 + intensity * 0.25 + voiceLevel * 0.5;
     gradePass.uniforms.uTime.value = t;
 
     controls.update();
@@ -497,6 +503,7 @@ export function createBrainScene(container: HTMLElement): OrbSceneApi {
     zoomOut: () => zoomBy(1.55),
     resetView,
     setThinking,
+    setVoiceLevel,
     dispose,
   };
 }

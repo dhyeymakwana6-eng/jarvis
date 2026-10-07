@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createOrbScene, type OrbSceneApi } from "@/lib/orbScene";
 import { createBrainScene } from "@/lib/brainScene";
 import { loadMode, MODES, saveMode, type Mode } from "@/lib/mode";
+import { VoicePlayer, voiceAvailable } from "@/lib/voice";
+import type { Task } from "@/lib/jarvisApi";
 import { HandTracker, type TrackerStatus } from "@/lib/handTracker";
 import ChatPanel from "@/components/ChatPanel";
 import ReminderCenter from "@/components/ReminderCenter";
@@ -31,11 +33,56 @@ export default function JarvisOrb() {
   const [mode, setMode] = useState<Mode | null>(null);
   useEffect(() => setMode(loadMode()), []);
   const toggleMode = useCallback(() => {
+    voiceRef.current?.stop(); // the other persona shouldn't finish the sentence
     setMode((current) => {
       const next: Mode = current === "ultron" ? "jarvis" : "ultron";
       saveMode(next);
       return next;
     });
+  }, []);
+
+  // ——— Voice ———
+  // Replies (and reminders) are spoken with the mode's local Piper voice
+  // while VOICE is on; the scene pulses with the loudness.
+  const voiceRef = useRef<VoicePlayer | null>(null);
+  const [voiceModes, setVoiceModes] = useState<Record<Mode, boolean> | null>(null);
+  const [voiceOn, setVoiceOn] = useState(false);
+  const voiceOnRef = useRef(false);
+  const modeRef = useRef<Mode>("jarvis");
+  useEffect(() => {
+    voiceOnRef.current = voiceOn;
+    if (mode) modeRef.current = mode;
+  }, [voiceOn, mode]);
+  useEffect(() => {
+    voiceRef.current = new VoicePlayer((level) => sceneRef.current?.setVoiceLevel(level));
+    void voiceAvailable().then(setVoiceModes);
+    try {
+      setVoiceOn(localStorage.getItem("jarvis.voice") === "on");
+    } catch {
+      // Storage blocked: voice starts off.
+    }
+    return () => voiceRef.current?.stop();
+  }, []);
+  const toggleVoice = useCallback(() => {
+    const next = !voiceOnRef.current;
+    if (next) voiceRef.current?.unlock(); // this click is the user gesture audio needs
+    else voiceRef.current?.stop();
+    setVoiceOn(next);
+    try {
+      localStorage.setItem("jarvis.voice", next ? "on" : "off");
+    } catch {
+      // Not remembered; harmless.
+    }
+  }, []);
+  const say = useCallback((text: string, as: Mode) => {
+    if (!voiceOnRef.current) return;
+    voiceRef.current?.speak(text, as).catch(() => {
+      // Interrupted or voice unavailable: the text is on screen anyway.
+    });
+  }, []);
+  const onChatSend = useCallback(() => {
+    voiceRef.current?.stop();
+    if (voiceOnRef.current) voiceRef.current?.unlock();
   }, []);
 
   // The orb spins up while Jarvis is thinking or a reminder just fired.
@@ -46,7 +93,9 @@ export default function JarvisOrb() {
     busy.current.chat = thinking;
     updateOrb();
   }, []);
-  const flareForReminder = useCallback(() => {
+  const flareForReminder = useCallback((tasks: Task[]) => {
+    const titles = tasks.map((t) => t.title).join(". ");
+    say(`Reminder: ${titles}.`, modeRef.current);
     busy.current.alert = true;
     updateOrb();
     if (alertTimer.current) clearTimeout(alertTimer.current);
@@ -54,7 +103,7 @@ export default function JarvisOrb() {
       busy.current.alert = false;
       updateOrb();
     }, 3000);
-  }, []);
+  }, [say]);
   useEffect(() => () => {
     if (alertTimer.current) clearTimeout(alertTimer.current);
   }, []);
@@ -171,11 +220,18 @@ export default function JarvisOrb() {
         case "M":
           toggleMode();
           break;
+        case "v":
+        case "V":
+          toggleVoice();
+          break;
+        case "Escape":
+          voiceRef.current?.stop();
+          break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleGestures, toggleMode]);
+  }, [toggleGestures, toggleMode, toggleVoice]);
 
   const cameraOn = camera === "on";
 
@@ -191,7 +247,12 @@ export default function JarvisOrb() {
 
       <div className="hud hud-title">{mode ? MODES[mode].title : "\u00a0"}</div>
 
-      <ChatPanel mode={mode ?? "jarvis"} onThinkingChange={setChatThinking} />
+      <ChatPanel
+        mode={mode ?? "jarvis"}
+        onThinkingChange={setChatThinking}
+        onSend={onChatSend}
+        onReply={say}
+      />
 
       <ReminderCenter onAlert={flareForReminder} notify={notifyOn} />
 
@@ -211,7 +272,8 @@ export default function JarvisOrb() {
             <span className="key">R</span> reset&nbsp;&nbsp;
             <span className="key">+/−</span> zoom&nbsp;&nbsp;
             <span className="key">/</span> chat&nbsp;&nbsp;
-            <span className="key">M</span> mode
+            <span className="key">M</span> mode&nbsp;&nbsp;
+            <span className="key">V</span> voice
           </div>
         )}
       </div>
@@ -240,6 +302,22 @@ export default function JarvisOrb() {
           >
             {mode ? MODES[mode].name : "…"}
           </button>
+          {voiceModes && (voiceModes.jarvis || voiceModes.ultron) && (
+            <button
+              type="button"
+              className="hud-btn"
+              aria-pressed={voiceOn}
+              onClick={toggleVoice}
+              disabled={!!mode && !voiceModes[mode]}
+              title={
+                mode && !voiceModes[mode]
+                  ? `No voice installed for ${MODES[mode].name}`
+                  : "Speak replies and reminders (V; Esc stops)"
+              }
+            >
+              {voiceOn ? "VOICE ON" : "VOICE OFF"}
+            </button>
+          )}
         </div>
         <div className="hud-row">
           {notifySupported && (

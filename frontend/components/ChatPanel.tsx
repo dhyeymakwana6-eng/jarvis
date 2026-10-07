@@ -16,9 +16,13 @@ interface ChatPanelProps {
   mode: Mode;
   /** Called when a request starts/finishes, to animate the orb. */
   onThinkingChange(thinking: boolean): void;
+  /** Called synchronously on send (a user gesture), e.g. to unlock audio. */
+  onSend?(): void;
+  /** Called with each reply, e.g. to speak it. */
+  onReply?(text: string, mode: Mode): void;
 }
 
-export default function ChatPanel({ mode, onThinkingChange }: ChatPanelProps) {
+export default function ChatPanel({ mode, onThinkingChange, onSend, onReply }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
@@ -79,6 +83,7 @@ export default function ChatPanel({ mode, onThinkingChange }: ChatPanelProps) {
     const query = input.trim();
     if (!query || pending) return;
 
+    onSend?.();
     setInput("");
     setError(null);
     addMessage("user", query);
@@ -91,6 +96,7 @@ export default function ChatPanel({ mode, onThinkingChange }: ChatPanelProps) {
     try {
       const reply = await chat(query, mode, controller.signal);
       addMessage(mode, reply);
+      onReply?.(reply, mode);
       setOnline(true);
     } catch (err) {
       if (controller.signal.aborted) return;

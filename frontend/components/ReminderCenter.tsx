@@ -13,8 +13,8 @@ const POLL_MS = 30_000;
 const SNOOZE_MINUTES = 10;
 
 interface ReminderCenterProps {
-  /** Called when a new reminder arrives, to flare the orb. */
-  onAlert(): void;
+  /** Called with newly arrived reminders, to flare the orb and speak them. */
+  onAlert(tasks: Task[]): void;
   /** Browser notifications are shown only while the tab is hidden. */
   notify: boolean;
 }
@@ -53,7 +53,7 @@ export default function ReminderCenter({ onAlert, notify }: ReminderCenterProps)
     fresh.forEach((t) => seen.current.add(t.id));
 
     if (fresh.length > 0) {
-      onAlertRef.current();
+      onAlertRef.current(fresh);
       if (notifyRef.current && document.hidden && "Notification" in window) {
         for (const t of fresh) {
           new Notification("Jarvis reminder", {

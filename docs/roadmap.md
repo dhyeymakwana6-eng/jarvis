@@ -219,6 +219,18 @@ gives each mode its own voice.
 
 ## Phase 16 — Voice System
 
+Status: In Progress (fully local)
+
+### Task 1 — Spoken Replies (Piper TTS, a voice per mode)
+
+Status: Complete
+
+### Task 2 — Push-to-Talk Speech Input (local Whisper)
+
+Status: Not Started
+
+### Task 3 — Wake Word (optional)
+
 Status: Not Started
 
 ## Phase 17 — Agent Framework

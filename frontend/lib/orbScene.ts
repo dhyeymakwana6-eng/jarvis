@@ -15,6 +15,8 @@ export interface OrbSceneApi {
   resetView(): void;
   /** Speed up and brighten the orb while the assistant is working. */
   setThinking(thinking: boolean): void;
+  /** 0..1 loudness of the voice while speaking; 0 when silent. */
+  setVoiceLevel(level: number): void;
   dispose(): void;
 }
 
@@ -714,6 +716,11 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
     targetSpeed = thinking ? THINKING_SPEED : 1;
   }
 
+  let voiceLevel = 0;
+  function setVoiceLevel(level: number) {
+    voiceLevel = level;
+  }
+
   function animate(timestamp?: number) {
     if (disposed) return;
     rafId = requestAnimationFrame(animate);
@@ -754,14 +761,15 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
     const fadeOut = Math.pow(Math.max(0, Math.sin(t * 0.25)), 3); // periodic full transparency
     const surge = wave3 * 1.5 + wave4 * 2.0;
     const coreScale = 1 + surge + Math.sin(t * 5) * 0.05;
-    coreSphere.scale.setScalar(coreScale);
+    // The core swells with the voice while speaking.
+    coreSphere.scale.setScalar(coreScale + voiceLevel * 1.2);
     // Opacity: mostly very low (0-0.15), sometimes fully transparent, brief bright on surge
     const coreOpacity = Math.max(
       0,
       (0.08 + wave1 * 0.05 + surge * 0.2) * (1 - fadeOut * 0.95),
     );
     coreSphereMat.opacity = Math.min(0.6, coreOpacity);
-    glowSphere.scale.setScalar(1 + surge * 0.8);
+    glowSphere.scale.setScalar(1 + surge * 0.8 + voiceLevel * 1.5);
     glowSphereMat.opacity = Math.max(0, (0.03 + surge * 0.08) * (1 - fadeOut * 0.9));
     // Icosahedron wireframe stays visible even when glow fades
     icoWire.scale.setScalar(1 + surge * 0.6);
@@ -826,7 +834,7 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
     }
 
     // Bloom pulse
-    bloom.strength = 1.6 + Math.sin(t * 0.8) * 0.3 + (speed - 1) * 0.25;
+    bloom.strength = 1.6 + Math.sin(t * 0.8) * 0.3 + (speed - 1) * 0.25 + voiceLevel * 0.9;
 
     // Update chromatic aberration time
     chromaticPass.uniforms.uTime.value = t;
@@ -878,6 +886,7 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
     zoomOut: () => zoomBy(1.55),
     resetView,
     setThinking,
+    setVoiceLevel,
     dispose,
   };
 }

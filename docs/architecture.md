@@ -70,6 +70,9 @@ Database
 * Goals API
 * Tasks API
 * Reminders API (due / dismiss / snooze; clients poll every 30s)
+* Voice API (POST /voice/speak -> WAV from local Piper, a voice per
+  mode; GET /voice/status). The browser adds ULTRON's effects
+  (pitch down, metallic comb, bass) and drives the scene from loudness
 
 ### Memory Layer
 
