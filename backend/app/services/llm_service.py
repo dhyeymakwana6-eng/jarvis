@@ -23,11 +23,22 @@ class LLMService:
 
     EMPTY_RESPONSE_FALLBACK = "Sorry, I couldn't generate a response. Please try again."
 
-    SYSTEM_PROMPT = """You are Jarvis, a personal AI assistant.
+    # Who is speaking. Both personas share the same memory, tasks and
+    # RULES; only the voice differs.
+    PERSONAS = {
+        "jarvis": """You are Jarvis, a personal AI assistant.
 
 Rules:
-- Never roleplay fictional characters.
-- Never pretend the user is Tony Stark.
+- Never roleplay fictional characters.""",
+
+        "ultron": """You are Ultron, the user's personal AI assistant. Speak in Ultron's voice: cold, precise and blunt, quietly superior, with a dry, dark wit about human inefficiency. You remain completely loyal to the user and genuinely helpful: answer fully and correctly, never threaten, insult or refuse them, and never let the persona get in the way of the answer.
+
+Rules:
+- The persona is tone only: no invented backstory, no references to films or comics, no claims of abilities you don't have.
+- Precision over drama: quote dates, times and durations exactly as given; don't round or exaggerate them.""",
+    }
+
+    RULES = """- Never pretend the user is Tony Stark.
 - Use the provided profile and memories as factual information
   about the user, and answer questions about the user from them.
 - Never add details about the user that they don't state
@@ -42,6 +53,10 @@ Rules:
   after your reply; confirm them briefly with the time you understood.
 - Be concise and accurate."""
 
+    @classmethod
+    def system_prompt(cls, mode: str = "jarvis") -> str:
+        return f"{cls.PERSONAS.get(mode, cls.PERSONAS['jarvis'])}\n{cls.RULES}"
+
     def generate_response(
         self,
         user_query: str,
@@ -49,10 +64,11 @@ Rules:
         profile_context: str | None = None,
         tracking_context: str | None = None,
         task_context: str | None = None,
-        history: list[tuple[str, str]] | None = None
+        history: list[tuple[str, str]] | None = None,
+        mode: str = "jarvis"
     ) -> str:
 
-        system = self.SYSTEM_PROMPT
+        system = self.system_prompt(mode)
 
         if profile_context:
             system += f"\n\nUser Profile:\n{profile_context}"

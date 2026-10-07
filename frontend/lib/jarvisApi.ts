@@ -1,4 +1,6 @@
 // Client for the Jarvis backend, via the /api/jarvis proxy in next.config.ts.
+import type { Mode } from "@/lib/mode";
+
 const BASE = "/api/jarvis";
 
 export class JarvisError extends Error {}
@@ -23,14 +25,14 @@ export async function isOnline(): Promise<boolean> {
   }
 }
 
-/** Sends one message; Jarvis answers using its memories, profile and goals. */
-export async function chat(query: string, signal?: AbortSignal): Promise<string> {
+/** Sends one message; the persona answers using memories, profile, goals and tasks. */
+export async function chat(query: string, mode: Mode, signal?: AbortSignal): Promise<string> {
   let res: Response;
   try {
     res = await fetch(`${BASE}/memory/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, mode }),
       signal,
     });
   } catch (err) {
@@ -53,6 +55,7 @@ export interface ChatTurn {
   id: number;
   user_message: string;
   assistant_message: string;
+  mode: Mode;
   created_at: string;
 }
 

@@ -18,8 +18,12 @@ Database
 
 ### Frontend
 
-* Next.js + Three.js orb UI (frontend/)
-* Chat panel calling /memory/chat through a Next.js proxy
+* Next.js + Three.js UI (frontend/)
+* Two modes: JARVIS (amber orb, lib/orbScene.ts) and ULTRON (blue
+  neural brain, lib/brainScene.ts), both implementing OrbSceneApi
+* Chat panel calling /memory/chat through a Next.js proxy, sending the
+  mode; the backend picks the persona prompt (LLMService.PERSONAS) and
+  stores the mode on each conversation
 
 ### Backend
 

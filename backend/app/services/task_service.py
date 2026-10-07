@@ -211,12 +211,30 @@ class TaskService:
         return moment.strftime("%a %d %b %Y %H:%M")
 
     @staticmethod
+    def _ago(moment: datetime, now: datetime) -> str:
+        """How long ago, computed here because small LLMs get date maths wrong."""
+        minutes = int((now - moment).total_seconds() // 60)
+
+        if minutes < 60:
+            return f"{minutes} min ago"
+        if minutes < 24 * 60:
+            hours = minutes // 60
+            return f"{hours} hour{'s' if hours != 1 else ''} ago"
+
+        days = minutes // (24 * 60)
+        return f"{days} day{'s' if days != 1 else ''} ago"
+
+    @staticmethod
     def _line(task: Task, now: datetime, project_names: dict[int, str]) -> str:
         details = []
 
         if task.due_at:
-            label = "was due" if task.due_at < now else "due"
-            details.append(f"{label} {TaskService._time(task.due_at, now)}")
+            if task.due_at < now:
+                details.append(
+                    f"was due {TaskService._time(task.due_at, now)}, {TaskService._ago(task.due_at, now)}"
+                )
+            else:
+                details.append(f"due {TaskService._time(task.due_at, now)}")
 
         if task.remind_at and task.reminded_at is None and task.remind_at > now:
             details.append(f"reminder {TaskService._time(task.remind_at, now)}")

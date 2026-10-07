@@ -83,7 +83,8 @@ class MemoryService:
     def generate_response(
         db: Session,
         user_id: int,
-        query: str
+        query: str,
+        mode: str = "jarvis"
     ):
 
         context = MemoryService.get_context(
@@ -104,5 +105,6 @@ class MemoryService:
             ),
             tracking_context=TrackingService.to_context(db, user_id),
             task_context=TaskService.to_context(db, user_id),
-            history=ConversationHistory.for_prompt(db, user_id)
+            history=ConversationHistory.for_prompt(db, user_id),
+            mode=mode
         )

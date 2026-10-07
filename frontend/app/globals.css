@@ -480,3 +480,15 @@ body {
     max-height: 40vh;
   }
 }
+
+/* ——— Persona ——— */
+.chat-msg-ultron {
+  color: #7fd8ff;
+  text-shadow: 0 0 6px rgba(60, 170, 255, 0.5);
+}
+
+.hud-mode-ultron {
+  border-color: rgba(90, 190, 255, 0.75);
+  color: #7fd8ff;
+  text-shadow: 0 0 6px rgba(60, 170, 255, 0.8);
+}

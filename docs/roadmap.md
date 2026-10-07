@@ -206,7 +206,16 @@ Status: Complete
 
 ## Phase 15 — Decision Engine
 
-Status: Not Started
+Status: Deferred (low value for now; the decisions table stays for later)
+
+## JARVIS / ULTRON Modes
+
+Status: Complete
+
+Two personas over the same memory, profile, goals and tasks: JARVIS
+(amber orb, calm) and ULTRON (blue neural brain, cold and blunt). Switch
+with the MODE button or M; each device remembers its mode. Phase 16
+gives each mode its own voice.
 
 ## Phase 16 — Voice System
 

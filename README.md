@@ -31,6 +31,7 @@ pip install -r requirements-dev.txt
 echo 'DATABASE_URL=postgresql+psycopg://USER:PASS@localhost:5432/jarvis' > .env
 python -m app.models.create_tables   # tables + default user
 python -m app.models.migrate         # new tables/columns, indexes, embeddings
+                                     # (re-run after pulling new versions)
 python -m pytest                     # optional
 
 # Frontend
@@ -79,6 +80,9 @@ Optional backend environment: `LLM_MODEL` (default `qwen3.5:9b`),
   orb; turn on ALERTS for browser notifications while the tab is in the
   background (localhost or HTTPS only). Set `JARVIS_TIMEZONE` (e.g.
   `Asia/Kolkata`) if the backend runs on a machine in another timezone.
+- Two modes: **JARVIS** (amber orb, calm) and **ULTRON** (blue neural
+  brain, cold and blunt). Same memory and tasks; switch with the mode
+  button or `M`. Each device remembers its mode.
 - Drag / scroll to spin and zoom the orb, `G` for webcam hand gestures,
   `R` to reset.
 - API docs: http://localhost:8000/docs

@@ -2,19 +2,23 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { chat, getHistory, isOnline, JarvisError } from "@/lib/jarvisApi";
+import { MODES, type Mode } from "@/lib/mode";
 
 interface Message {
   id: number;
-  role: "user" | "jarvis";
+  // Assistant replies are labelled with the persona that gave them.
+  role: "user" | Mode;
   text: string;
 }
 
 interface ChatPanelProps {
+  /** Persona that answers: picks the backend personality. */
+  mode: Mode;
   /** Called when a request starts/finishes, to animate the orb. */
   onThinkingChange(thinking: boolean): void;
 }
 
-export default function ChatPanel({ onThinkingChange }: ChatPanelProps) {
+export default function ChatPanel({ mode, onThinkingChange }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
@@ -39,7 +43,7 @@ export default function ChatPanel({ onThinkingChange }: ChatPanelProps) {
             ? prev
             : turns.flatMap((t) => [
                 { id: nextId.current++, role: "user" as const, text: t.user_message },
-                { id: nextId.current++, role: "jarvis" as const, text: t.assistant_message },
+                { id: nextId.current++, role: t.mode, text: t.assistant_message },
               ]),
         );
       })
@@ -85,8 +89,8 @@ export default function ChatPanel({ onThinkingChange }: ChatPanelProps) {
     abortRef.current = controller;
 
     try {
-      const reply = await chat(query, controller.signal);
-      addMessage("jarvis", reply);
+      const reply = await chat(query, mode, controller.signal);
+      addMessage(mode, reply);
       setOnline(true);
     } catch (err) {
       if (controller.signal.aborted) return;
@@ -104,7 +108,7 @@ export default function ChatPanel({ onThinkingChange }: ChatPanelProps) {
   const statusLabel = online === null ? "CONNECTING…" : online ? "ONLINE" : "OFFLINE";
 
   return (
-    <section className="hud hud-chat" aria-label="Chat with Jarvis">
+    <section className="hud hud-chat" aria-label={`Chat with ${MODES[mode].name}`}>
       <header className="chat-header">
         <span>COMMS</span>
         <span className={`chat-status chat-status-${online === false ? "off" : "on"}`}>
@@ -120,13 +124,13 @@ export default function ChatPanel({ onThinkingChange }: ChatPanelProps) {
         )}
         {messages.map((m) => (
           <div key={m.id} className={`chat-msg chat-msg-${m.role}`}>
-            <span className="chat-role">{m.role === "user" ? "YOU" : "JARVIS"}</span>
+            <span className="chat-role">{m.role === "user" ? "YOU" : MODES[m.role].name}</span>
             <p>{m.text}</p>
           </div>
         ))}
         {pending && (
-          <div className="chat-msg chat-msg-jarvis">
-            <span className="chat-role">JARVIS</span>
+          <div className={`chat-msg chat-msg-${mode}`}>
+            <span className="chat-role">{MODES[mode].name}</span>
             <p className="chat-thinking">PROCESSING…</p>
           </div>
         )}
@@ -140,7 +144,7 @@ export default function ChatPanel({ onThinkingChange }: ChatPanelProps) {
           className="chat-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Message Jarvis…  ( / )"
+          placeholder={`Message ${mode === "ultron" ? "Ultron" : "Jarvis"}…  ( / )`}
           aria-label="Message"
           autoComplete="off"
           disabled={pending}

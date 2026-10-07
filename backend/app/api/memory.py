@@ -182,7 +182,8 @@ def chat_endpoint(
         response = MemoryService.generate_response(
             db,
             DEFAULT_USER_ID,
-            request.query
+            request.query,
+            request.mode
         )
     except LLMUnavailableError as error:
         raise HTTPException(
@@ -196,7 +197,8 @@ def chat_endpoint(
     conversation = Conversation(
         user_id=DEFAULT_USER_ID,
         user_message=request.query,
-        assistant_message=response
+        assistant_message=response,
+        mode=request.mode
     )
     db.add(conversation)
     db.commit()

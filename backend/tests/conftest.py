@@ -1,8 +1,10 @@
 import pytest
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.database.base import Base
 from app.database.connection import engine, get_db
+from app.models.migrate import STATEMENTS as MIGRATIONS
 from app.models import User
 
 TEST_USER_ID = 999999
@@ -21,9 +23,12 @@ def db():
         pytest.skip(f"database unavailable: {error}")
 
     transaction = connection.begin()
-    # Tables the real DB hasn't been migrated to yet (Postgres DDL is
-    # transactional, so this is rolled back with everything else).
+    # Tables and columns the real DB hasn't been migrated to yet
+    # (Postgres DDL is transactional, so this is rolled back with
+    # everything else; migrate.py's statements are idempotent).
     Base.metadata.create_all(bind=connection)
+    for statement in MIGRATIONS:
+        connection.execute(text(statement))
     session = Session(bind=connection, join_transaction_mode="create_savepoint")
 
     session.add(User(id=TEST_USER_ID, name="test", education="", skills="", preferences=""))

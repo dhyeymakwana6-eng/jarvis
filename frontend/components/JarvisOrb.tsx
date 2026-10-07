@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createOrbScene, type OrbSceneApi } from "@/lib/orbScene";
+import { createBrainScene } from "@/lib/brainScene";
+import { loadMode, MODES, saveMode, type Mode } from "@/lib/mode";
 import { HandTracker, type TrackerStatus } from "@/lib/handTracker";
 import ChatPanel from "@/components/ChatPanel";
 import ReminderCenter from "@/components/ReminderCenter";
@@ -24,6 +26,17 @@ export default function JarvisOrb() {
   const [camera, setCamera] = useState<CameraState>("off");
   const [status, setStatus] = useState<TrackerStatus>({ hands: 0, mode: "idle" });
   const [error, setError] = useState<string | null>(null);
+
+  // null until read from storage, so the first scene built is the right one.
+  const [mode, setMode] = useState<Mode | null>(null);
+  useEffect(() => setMode(loadMode()), []);
+  const toggleMode = useCallback(() => {
+    setMode((current) => {
+      const next: Mode = current === "ultron" ? "jarvis" : "ultron";
+      saveMode(next);
+      return next;
+    });
+  }, []);
 
   // The orb spins up while Jarvis is thinking or a reminder just fired.
   const busy = useRef({ chat: false, alert: false });
@@ -63,18 +76,28 @@ export default function JarvisOrb() {
     setNotifyOn(permission === "granted");
   }, [notifyOn]);
 
+  // One scene at a time: switching mode swaps it, keeping the camera
+  // (hand tracking) and any "thinking" state.
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
-    const scene = createOrbScene(container);
+    if (!container || !mode) return;
+    const scene = mode === "ultron" ? createBrainScene(container) : createOrbScene(container);
     sceneRef.current = scene;
+    updateOrb();
     return () => {
-      trackerRef.current?.stop();
-      trackerRef.current = null;
       scene.dispose();
       sceneRef.current = null;
     };
-  }, []);
+    // updateOrb only reads refs, so it isn't a dependency.
+  }, [mode]);
+
+  useEffect(
+    () => () => {
+      trackerRef.current?.stop();
+      trackerRef.current = null;
+    },
+    [],
+  );
 
   const stopGestures = useCallback(() => {
     trackerRef.current?.stop();
@@ -144,25 +167,31 @@ export default function JarvisOrb() {
         case "G":
           toggleGestures();
           break;
+        case "m":
+        case "M":
+          toggleMode();
+          break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleGestures]);
+  }, [toggleGestures, toggleMode]);
 
   const cameraOn = camera === "on";
 
   return (
     <>
+      {/* React 19 hoists this into <head>; it follows the mode. */}
+      <title>{mode === "ultron" ? "Ultron" : "Jarvis"}</title>
       <div ref={containerRef} className="orb-root" />
 
       <div className="overlay-vignette" />
       <div className="overlay-grain" />
       <div className="overlay-scanlines" />
 
-      <div className="hud hud-title">J.A.R.V.I.S.</div>
+      <div className="hud hud-title">{mode ? MODES[mode].title : "\u00a0"}</div>
 
-      <ChatPanel onThinkingChange={setChatThinking} />
+      <ChatPanel mode={mode ?? "jarvis"} onThinkingChange={setChatThinking} />
 
       <ReminderCenter onAlert={flareForReminder} notify={notifyOn} />
 
@@ -181,7 +210,8 @@ export default function JarvisOrb() {
             <span className="key">G</span> hand gestures&nbsp;&nbsp;
             <span className="key">R</span> reset&nbsp;&nbsp;
             <span className="key">+/−</span> zoom&nbsp;&nbsp;
-            <span className="key">/</span> chat
+            <span className="key">/</span> chat&nbsp;&nbsp;
+            <span className="key">M</span> mode
           </div>
         )}
       </div>
@@ -200,6 +230,17 @@ export default function JarvisOrb() {
 
         {error && <div className="hud-error">{error}</div>}
 
+        <div className="hud-row">
+          <button
+            type="button"
+            className={`hud-btn hud-mode${mode === "ultron" ? " hud-mode-ultron" : ""}`}
+            onClick={toggleMode}
+            disabled={!mode}
+            title="Switch between JARVIS and ULTRON (M)"
+          >
+            {mode ? MODES[mode].name : "…"}
+          </button>
+        </div>
         <div className="hud-row">
           {notifySupported && (
             <button
