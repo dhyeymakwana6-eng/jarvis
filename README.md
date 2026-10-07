@@ -32,6 +32,8 @@ echo 'DATABASE_URL=postgresql+psycopg://USER:PASS@localhost:5432/jarvis' > .env
 python -m app.models.create_tables   # tables + default user
 python -m piper.download_voices --download-dir data/voices \
   en_GB-alan-medium en_US-ryan-medium   # JARVIS / ULTRON voices (~60 MB each)
+# Speech-to-text (base.en, ~140 MB) downloads into data/whisper on first use.
+# Note: faster-whisper 1.2.1 needs av<18 (pinned to 17.1.0).
 python -m app.models.migrate         # new tables/columns, indexes, embeddings
                                      # (re-run after pulling new versions)
 python -m pytest                     # optional
@@ -89,6 +91,10 @@ Optional backend environment: `LLM_MODEL` (default `qwen3.5:9b`),
   with Piper: a British voice for JARVIS, a deeper processed one for
   ULTRON. `Esc` stops speaking. Voices are set with `JARVIS_VOICE` /
   `ULTRON_VOICE` (any Piper voice name) and `PIPER_VOICE_DIR`.
+- **Talk to it:** hold **TALK** (or hold `Space` when not typing),
+  speak, release. Whisper transcribes it locally and sends it. The mic is
+  open only while held, and needs localhost or HTTPS (not plain
+  `http://<LAN IP>`). `WHISPER_MODEL` picks the model (e.g. `small.en`).
 - Drag / scroll to spin and zoom the orb, `G` for webcam hand gestures,
   `R` to reset.
 - API docs: http://localhost:8000/docs

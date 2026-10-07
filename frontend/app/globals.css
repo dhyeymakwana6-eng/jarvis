@@ -492,3 +492,16 @@ body {
   color: #7fd8ff;
   text-shadow: 0 0 6px rgba(60, 170, 255, 0.8);
 }
+
+/* ——— Push to talk ——— */
+.chat-talk {
+  min-width: 72px;
+  touch-action: none; /* holding on a phone shouldn't scroll or zoom */
+  -webkit-touch-callout: none;
+}
+
+.chat-talk-live {
+  border-color: #ff5533;
+  color: #ff7a55;
+  animation: chat-pulse 1s ease-in-out infinite;
+}

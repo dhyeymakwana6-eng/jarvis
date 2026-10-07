@@ -252,6 +252,7 @@ export default function JarvisOrb() {
         onThinkingChange={setChatThinking}
         onSend={onChatSend}
         onReply={say}
+        onListenLevel={(level) => sceneRef.current?.setVoiceLevel(level)}
       />
 
       <ReminderCenter onAlert={flareForReminder} notify={notifyOn} />
@@ -273,7 +274,8 @@ export default function JarvisOrb() {
             <span className="key">+/−</span> zoom&nbsp;&nbsp;
             <span className="key">/</span> chat&nbsp;&nbsp;
             <span className="key">M</span> mode&nbsp;&nbsp;
-            <span className="key">V</span> voice
+            <span className="key">V</span> voice&nbsp;&nbsp;
+            <span className="key">SPACE</span> hold to talk
           </div>
         )}
       </div>

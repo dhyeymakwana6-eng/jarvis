@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { chat, getHistory, isOnline, JarvisError } from "@/lib/jarvisApi";
 import { MODES, type Mode } from "@/lib/mode";
+import { canRecord, Recorder, transcribe } from "@/lib/speech";
+
+type MicState = "idle" | "listening" | "transcribing";
 
 interface Message {
   id: number;
@@ -20,9 +23,11 @@ interface ChatPanelProps {
   onSend?(): void;
   /** Called with each reply, e.g. to speak it. */
   onReply?(text: string, mode: Mode): void;
+  /** Mic loudness 0..1 while the user is talking, for the scene. */
+  onListenLevel?(level: number): void;
 }
 
-export default function ChatPanel({ mode, onThinkingChange, onSend, onReply }: ChatPanelProps) {
+export default function ChatPanel({ mode, onThinkingChange, onSend, onReply, onListenLevel }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
@@ -78,12 +83,16 @@ export default function ChatPanel({ mode, onThinkingChange, onSend, onReply }: C
   const addMessage = (role: Message["role"], text: string) =>
     setMessages((prev) => [...prev, { id: nextId.current++, role, text }]);
 
-  async function send(e: FormEvent) {
+  function send(e: FormEvent) {
     e.preventDefault();
-    const query = input.trim();
+    onSend?.();
+    void sendText(input);
+  }
+
+  async function sendText(text: string) {
+    const query = text.trim();
     if (!query || pending) return;
 
-    onSend?.();
     setInput("");
     setError(null);
     addMessage("user", query);
@@ -110,6 +119,96 @@ export default function ChatPanel({ mode, onThinkingChange, onSend, onReply }: C
       }
     }
   }
+
+  // ——— Push to talk ———
+  // Hold TALK (or Space when not typing), speak, release: the recording
+  // is transcribed locally and sent like a typed message.
+  const [mic, setMic] = useState<MicState>("idle");
+  const [micSupported, setMicSupported] = useState(false);
+  const recorderRef = useRef<Recorder | null>(null);
+  const listenLevel = useRef(onListenLevel);
+  const sendTextRef = useRef(sendText);
+  useEffect(() => {
+    listenLevel.current = onListenLevel;
+    sendTextRef.current = sendText;
+  });
+  useEffect(() => {
+    setMicSupported(canRecord());
+    recorderRef.current = new Recorder((level) => listenLevel.current?.(level));
+    return () => void recorderRef.current?.stop();
+  }, []);
+
+  const micRef = useRef<MicState>("idle");
+  const updateMic = (state: MicState) => {
+    micRef.current = state;
+    setMic(state);
+  };
+
+  async function startTalking() {
+    if (micRef.current !== "idle" || pending) return;
+    onSend?.(); // stops speech, unlocks audio (this is a user gesture)
+    setError(null);
+    updateMic("listening");
+    try {
+      await recorderRef.current?.start();
+    } catch {
+      updateMic("idle");
+      setError("MICROPHONE BLOCKED");
+    }
+  }
+
+  async function stopTalking() {
+    if (micRef.current !== "listening") return;
+    const audio = await recorderRef.current?.stop();
+    if (!audio) {
+      updateMic("idle"); // a tap, not speech
+      return;
+    }
+    updateMic("transcribing");
+    try {
+      const text = await transcribe(audio);
+      updateMic("idle");
+      if (text) void sendTextRef.current(text);
+      else setError("DIDN'T CATCH THAT");
+    } catch (err) {
+      updateMic("idle");
+      setError(err instanceof JarvisError ? err.message : "COULDN'T HEAR THAT");
+    }
+  }
+  const startRef = useRef(startTalking);
+  const stopRef = useRef(stopTalking);
+  useEffect(() => {
+    startRef.current = startTalking;
+    stopRef.current = stopTalking;
+  });
+
+  // Space: hold to talk, unless typing or on a button.
+  useEffect(() => {
+    if (!micSupported) return;
+    const typing = (target: EventTarget | null) =>
+      target instanceof HTMLElement && !!target.closest("input, textarea, button, [contenteditable]");
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || e.repeat || typing(e.target)) return;
+      e.preventDefault();
+      void startRef.current();
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || typing(e.target)) return;
+      e.preventDefault();
+      void stopRef.current();
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, [micSupported]);
+
+  const placeholder =
+    mic === "listening" ? "LISTENING…  (release to send)"
+    : mic === "transcribing" ? "TRANSCRIBING…"
+    : `Message ${mode === "ultron" ? "Ultron" : "Jarvis"}…  ( / )`;
 
   const statusLabel = online === null ? "CONNECTING…" : online ? "ONLINE" : "OFFLINE";
 
@@ -150,14 +249,33 @@ export default function ChatPanel({ mode, onThinkingChange, onSend, onReply }: C
           className="chat-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={`Message ${mode === "ultron" ? "Ultron" : "Jarvis"}…  ( / )`}
+          placeholder={placeholder}
           aria-label="Message"
           autoComplete="off"
-          disabled={pending}
+          disabled={pending || mic !== "idle"}
         />
-        <button type="submit" className="hud-btn" disabled={pending || !input.trim()}>
-          SEND
-        </button>
+        {micSupported && !input.trim() ? (
+          <button
+            type="button"
+            className={`hud-btn chat-talk${mic === "listening" ? " chat-talk-live" : ""}`}
+            aria-pressed={mic === "listening"}
+            disabled={pending || mic === "transcribing"}
+            title="Hold to talk (or hold Space)"
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              void startTalking();
+            }}
+            onPointerUp={() => void stopTalking()}
+            onPointerCancel={() => void stopTalking()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            {mic === "listening" ? "● REC" : mic === "transcribing" ? "…" : "TALK"}
+          </button>
+        ) : (
+          <button type="submit" className="hud-btn" disabled={pending || !input.trim()}>
+            SEND
+          </button>
+        )}
       </form>
     </section>
   );

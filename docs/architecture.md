@@ -73,6 +73,9 @@ Database
 * Voice API (POST /voice/speak -> WAV from local Piper, a voice per
   mode; GET /voice/status). The browser adds ULTRON's effects
   (pitch down, metallic comb, bass) and drives the scene from loudness
+* POST /voice/transcribe: raw browser recording -> text via local
+  faster-whisper (base.en, int8), prompted with the user's name and
+  project names so it spells them right
 
 ### Memory Layer
 

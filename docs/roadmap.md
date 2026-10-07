@@ -227,7 +227,7 @@ Status: Complete
 
 ### Task 2 — Push-to-Talk Speech Input (local Whisper)
 
-Status: Not Started
+Status: Complete
 
 ### Task 3 — Wake Word (optional)
 
