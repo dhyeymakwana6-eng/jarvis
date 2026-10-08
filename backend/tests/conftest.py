@@ -42,6 +42,11 @@ def db():
         connection.close()
 
 
+# Importing the app loads backend/.env; do it now, so the fixture below
+# can clear a passcode set there (a later first import would re-add it).
+import app.main  # noqa: E402,F401
+
+
 @pytest.fixture(autouse=True)
 def no_passcode(monkeypatch):
     """Auth is off in tests unless a test turns it on (a local .env may set it)."""
