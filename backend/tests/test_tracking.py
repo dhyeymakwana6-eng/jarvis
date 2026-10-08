@@ -85,17 +85,17 @@ def test_questions_skip_the_llm(db, monkeypatch):
 def test_context_shows_open_items_with_deadlines_and_hides_closed_ones(db):
     jarvis = create_project(db, TEST_USER_ID, "Jarvis", next_action="Add reminders")
     create_project(db, TEST_USER_ID, "Portfolio", status="abandoned")
-    create_goal(db, TEST_USER_ID, "Deploy to Pi", project_id=jarvis.id, target_date=date(2026, 10, 9), progress=50)
-    create_goal(db, TEST_USER_ID, "Fix login bug", target_date=date(2026, 10, 1))
+    pi = create_goal(db, TEST_USER_ID, "Deploy to Pi", project_id=jarvis.id, target_date=date(2026, 10, 9), progress=50)
+    bug = create_goal(db, TEST_USER_ID, "Fix login bug", target_date=date(2026, 10, 1))
     create_goal(db, TEST_USER_ID, "Old goal", status="completed")
 
     context = TrackingService.to_context(db, TEST_USER_ID, TODAY)
 
-    assert "- Jarvis (next step: Add reminders)" in context
+    assert f"- [project {jarvis.id}] Jarvis (next step: Add reminders)" in context
     assert "Portfolio" not in context
     assert "Old goal" not in context
-    assert "- Deploy to Pi (project: Jarvis; 50% done; due 2026-10-09, in 5 days)" in context
-    assert "- Fix login bug (OVERDUE, was due 2026-10-01)" in context
+    assert f"- [goal {pi.id}] Deploy to Pi (project: Jarvis; 50% done; due 2026-10-09, in 5 days)" in context
+    assert f"- [goal {bug.id}] Fix login bug (OVERDUE, was due 2026-10-01)" in context
 
 
 def test_context_is_none_without_open_items(db):

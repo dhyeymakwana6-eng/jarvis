@@ -2,7 +2,7 @@ import secrets
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from typing import Callable, Literal
 
 from pydantic import BaseModel, Field, ValidationError
@@ -10,8 +10,20 @@ from sqlalchemy.orm import Session
 
 from app.core.clock import local_now
 from app.crud.task import create_task, delete_task, find_task_by_title, get_task, get_tasks, update_task
-from app.crud.tracking import find_project_by_name
+from app.crud.tracking import (
+    create_goal,
+    create_project,
+    delete_goal,
+    delete_project,
+    find_goal_by_title,
+    find_project_by_name,
+    get_goal,
+    get_project,
+    update_goal,
+    update_project
+)
 from app.schemas.task import Priority
+from app.schemas.tracking import Status
 from app.services.task_service import TaskService
 
 
@@ -29,7 +41,7 @@ class CreateTaskArgs(BaseModel):
 
 
 class UpdateTaskArgs(BaseModel):
-    id: int = Field(description="the task's id from the task list")
+    id: int = Field(description="N from the task's [task N]")
     status: Literal["todo", "done", "cancelled"] | None = Field(
         None, description="done when finished, cancelled when no longer needed, todo to reopen"
     )
@@ -40,11 +52,55 @@ class UpdateTaskArgs(BaseModel):
 
 
 class TaskIdArgs(BaseModel):
-    id: int = Field(description="the task's id from the task list")
+    id: int = Field(description="N from the task's [task N]")
 
 
 class ListTasksArgs(BaseModel):
     status: Literal["todo", "done", "cancelled"] = "todo"
+
+
+StatusHelp = "completed when finished, paused when on hold, abandoned when dropped for good, active when resumed"
+Day = 'YYYY-MM-DD; "by <month>" or "this month/year" means the last day of that period'
+
+
+class CreateProjectArgs(BaseModel):
+    name: str = Field(description="the project's short name")
+    description: str | None = None
+    next_action: str | None = Field(None, description="the next step, if the user says one")
+
+
+class UpdateProjectArgs(BaseModel):
+    id: int = Field(description="N from the project's [project N]")
+    status: Status | None = Field(None, description=StatusHelp)
+    name: str | None = None
+    next_action: str | None = Field(None, description="the next step the user says they need to take")
+    description: str | None = None
+
+
+class ProjectIdArgs(BaseModel):
+    id: int = Field(description="N from the project's [project N]")
+
+
+class CreateGoalArgs(BaseModel):
+    title: str = Field(description='the objective, without the deadline ("Deploy Jarvis on a Raspberry Pi")')
+    project: str | None = Field(None, description="name of one of the user's projects it belongs to")
+    target_date: str | None = Field(None, description=f"deadline the user states, {Day}")
+    progress: int | None = Field(None, ge=0, le=100, description="percent done, if the user says")
+
+
+class UpdateGoalArgs(BaseModel):
+    id: int = Field(description="N from the goal's [goal N]")
+    status: Status | None = Field(None, description=StatusHelp)
+    progress: int | None = Field(
+        None, ge=0, le=100,
+        description='percent done the user states or implies ("halfway" 50, "almost done" 90)'
+    )
+    target_date: str | None = Field(None, description=f"new deadline, {Day}")
+    title: str | None = None
+
+
+class GoalIdArgs(BaseModel):
+    id: int = Field(description="N from the goal's [goal N]")
 
 
 # ---------- Tools ----------
@@ -183,6 +239,161 @@ def _confirm_delete(ctx: ToolContext, args: TaskIdArgs) -> str:
     return f"Delete “{_task(ctx, args.id).title}”"
 
 
+def _project(ctx: ToolContext, project_id: int):
+    project = get_project(ctx.db, ctx.user_id, project_id)
+    if project is None:
+        raise ToolError(f"no project with id {project_id}")
+    return project
+
+
+def _goal(ctx: ToolContext, goal_id: int):
+    goal = get_goal(ctx.db, ctx.user_id, goal_id)
+    if goal is None:
+        raise ToolError(f"no goal with id {goal_id}")
+    return goal
+
+
+def _project_by_name(ctx: ToolContext, name: str | None):
+    if not name:
+        return None
+    project = find_project_by_name(ctx.db, ctx.user_id, name)
+    if project is None:
+        raise ToolError(f"no project named {name!r}; create it first or leave project empty")
+    return project
+
+
+def _date_arg(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value.strip()[:10])
+    except ValueError:
+        raise ToolError(f"can't read the date {value!r}; use YYYY-MM-DD")
+
+
+STATUS_VERB = {"completed": "Completed", "paused": "Paused", "abandoned": "Dropped", "active": "Resumed"}
+
+
+def _create_project(ctx: ToolContext, args: CreateProjectArgs) -> str:
+    name = args.name.strip()[:200]
+    if not name:
+        raise ToolError("the name is empty")
+
+    if find_project_by_name(ctx.db, ctx.user_id, name):
+        return f"Already a project: “{name}”"
+
+    project = create_project(
+        ctx.db,
+        ctx.user_id,
+        name,
+        description=args.description,
+        next_action=(args.next_action or None) and args.next_action[:500]
+    )
+    return f"Started project “{project.name}”" + (f" (next: {project.next_action})" if project.next_action else "")
+
+
+def _update_project(ctx: ToolContext, args: UpdateProjectArgs) -> str:
+    project = _project(ctx, args.id)
+
+    fields = {}
+    if args.status:
+        fields["status"] = args.status
+    if args.name and args.name.strip():
+        fields["name"] = args.name.strip()[:200]
+    if args.next_action and args.next_action.strip():
+        fields["next_action"] = args.next_action.strip()[:500]
+    if args.description:
+        fields["description"] = args.description
+
+    if not fields:
+        raise ToolError("nothing to change")
+
+    project = update_project(ctx.db, ctx.user_id, project.id, fields)
+
+    if fields.keys() == {"status"}:
+        return f"{STATUS_VERB[args.status]} project “{project.name}”"
+
+    changes = [f"next: {project.next_action}"] if "next_action" in fields else []
+    if args.status:
+        changes.append(project.status)
+    return f"Updated project “{project.name}”" + (f" ({', '.join(changes)})" if changes else "")
+
+
+def _delete_project(ctx: ToolContext, args: ProjectIdArgs) -> str:
+    project = _project(ctx, args.id)
+    delete_project(ctx.db, ctx.user_id, project.id)
+    return f"Deleted project “{project.name}”"
+
+
+def _confirm_delete_project(ctx: ToolContext, args: ProjectIdArgs) -> str:
+    return f"Delete project “{_project(ctx, args.id).name}” (its goals and tasks stay)"
+
+
+def _describe_goal(goal) -> str:
+    details = []
+    if goal.progress:
+        details.append(f"{goal.progress}%")
+    if goal.target_date:
+        details.append(f"by {goal.target_date.isoformat()}")
+    return f"“{goal.title}”" + (f" ({', '.join(details)})" if details else "")
+
+
+def _create_goal(ctx: ToolContext, args: CreateGoalArgs) -> str:
+    title = args.title.strip()[:300]
+    if not title:
+        raise ToolError("the title is empty")
+
+    existing = find_goal_by_title(ctx.db, ctx.user_id, title)
+    if existing:
+        return f"Already a goal: {_describe_goal(existing)}"
+
+    project = _project_by_name(ctx, args.project)
+
+    goal = create_goal(
+        ctx.db,
+        ctx.user_id,
+        title,
+        project_id=project.id if project else None,
+        target_date=_date_arg(args.target_date),
+        progress=args.progress or 0
+    )
+    return f"New goal {_describe_goal(goal)}"
+
+
+def _update_goal(ctx: ToolContext, args: UpdateGoalArgs) -> str:
+    goal = _goal(ctx, args.id)
+
+    fields = {}
+    if args.status:
+        fields["status"] = args.status
+    if args.progress is not None:
+        fields["progress"] = args.progress
+    if args.target_date:
+        fields["target_date"] = _date_arg(args.target_date)
+    if args.title and args.title.strip():
+        fields["title"] = args.title.strip()[:300]
+
+    if not fields:
+        raise ToolError("nothing to change")
+
+    goal = update_goal(ctx.db, ctx.user_id, goal.id, fields)
+
+    if fields.keys() == {"status"}:
+        return f"{STATUS_VERB[args.status]} goal “{goal.title}”"
+
+    return f"Updated goal {_describe_goal(goal)}" + (f", {goal.status}" if args.status else "")
+
+
+def _delete_goal(ctx: ToolContext, args: GoalIdArgs) -> str:
+    goal = _goal(ctx, args.id)
+    delete_goal(ctx.db, ctx.user_id, goal.id)
+    return f"Deleted goal “{goal.title}”"
+
+
+def _confirm_delete_goal(ctx: ToolContext, args: GoalIdArgs) -> str:
+    return f"Delete goal “{_goal(ctx, args.id).title}”"
+
+
 def _list_tasks(ctx: ToolContext, args: ListTasksArgs) -> str:
     tasks = get_tasks(ctx.db, ctx.user_id, status=args.status)[-30:]
     if not tasks:
@@ -217,12 +428,73 @@ TOOLS = {tool.name: tool for tool in [
         ListTasksArgs,
         _list_tasks
     ),
+    Tool(
+        "create_project",
+        "Start tracking a new, named piece of work the user has begun (not one already listed).",
+        CreateProjectArgs,
+        _create_project
+    ),
+    Tool(
+        "update_project",
+        "Change a listed project: finish, pause, drop or resume it, rename it, or set its next step.",
+        UpdateProjectArgs,
+        _update_project
+    ),
+    Tool(
+        "delete_project",
+        "Permanently remove a project (only when the user asks to delete it; to drop it use update_project with status abandoned).",
+        ProjectIdArgs,
+        _delete_project,
+        confirm=_confirm_delete_project
+    ),
+    Tool(
+        "create_goal",
+        "Add a goal: an outcome the user works towards over weeks or months (a single action due soon is a task).",
+        CreateGoalArgs,
+        _create_goal
+    ),
+    Tool(
+        "update_goal",
+        "Change a listed goal: its progress, deadline or status (completed, paused, abandoned, active), or rename it.",
+        UpdateGoalArgs,
+        _update_goal
+    ),
+    Tool(
+        "delete_goal",
+        "Permanently remove a goal (only when the user asks to delete it; to drop it use update_goal with status abandoned).",
+        GoalIdArgs,
+        _delete_goal,
+        confirm=_confirm_delete_goal
+    ),
 ]}
 
-# Tools that change tasks. When the chat used them in a turn, the
-# background tracker doesn't add tasks for it (they'd be duplicates)
-# and leaves the tasks they touched alone.
-TASK_TOOLS = {"create_task", "update_task", "delete_task"}
+# What each changing tool acts on. When the chat agent acted on a kind of
+# item in a turn, the background tracker doesn't create that kind for it
+# (they'd be duplicates) and leaves the items it touched alone.
+KIND_OF_TOOL = {
+    "create_task": "task", "update_task": "task", "delete_task": "task",
+    "create_project": "project", "update_project": "project", "delete_project": "project",
+    "create_goal": "goal", "update_goal": "goal", "delete_goal": "goal",
+}
+
+
+def agent_edits(actions: list[dict]) -> dict[str, set[int]]:
+    """
+    From a turn's logged actions: each kind the agent acted on, with the
+    ids of existing items it changed. Older rows logged task_id.
+    """
+    edits: dict[str, set[int]] = {}
+
+    for action in actions or []:
+        kind = KIND_OF_TOOL.get(action.get("tool"))
+        if kind is None:
+            continue
+        ids = edits.setdefault(kind, set())
+        target = action.get("target_id") or action.get("task_id")
+        if target:
+            ids.add(target)
+
+    return edits
 
 
 # ---------- Actions ----------
@@ -236,8 +508,8 @@ class Action(BaseModel):
     status: ActionStatus
     # Set while it waits for the user's confirmation.
     pending_id: str | None = None
-    # The existing task it changed or deletes (update/delete).
-    task_id: int | None = None
+    # The existing item it changed or deletes (update/delete).
+    target_id: int | None = None
 
 
 @dataclass
@@ -292,7 +564,10 @@ class PendingActions:
 
 
 class AgentService:
-    """Runs the chat model's tool calls, holding destructive ones for confirmation."""
+    """
+    Runs the chat model's tool calls on the user's tasks, projects and
+    goals, holding destructive ones for confirmation.
+    """
 
     @staticmethod
     def tool_schemas() -> list[dict]:
@@ -318,19 +593,19 @@ class AgentService:
 
         try:
             args = tool.args.model_validate(arguments or {})
-            task_id = getattr(args, "id", None)
+            target_id = getattr(args, "id", None)
 
             if tool.confirm:
                 summary = tool.confirm(ctx, args)
                 pending_id = PendingActions.add(user_id, name, args.model_dump())
                 return (
-                    Action(tool=name, summary=summary, status="pending", pending_id=pending_id, task_id=task_id),
+                    Action(tool=name, summary=summary, status="pending", pending_id=pending_id, target_id=target_id),
                     f"Not done yet: “{summary}” needs the user's confirmation, and they have "
                     "a Confirm button for it. Ask them to confirm; don't say it's done."
                 )
 
             summary = tool.run(ctx, args)
-            return Action(tool=name, summary=summary, status="done", task_id=task_id), summary
+            return Action(tool=name, summary=summary, status="done", target_id=target_id), summary
 
         except (ToolError, ValidationError) as error:
             db.rollback()
@@ -366,10 +641,10 @@ class AgentService:
                 summary = tool.confirm(ctx, args)
             except ToolError:
                 summary = item.tool.replace("_", " ")
-            return Action(tool=item.tool, summary=f"Not done: {summary}", status="declined", task_id=args.id), item.conversation_id
+            return Action(tool=item.tool, summary=f"Not done: {summary}", status="declined", target_id=args.id), item.conversation_id
 
         try:
-            return Action(tool=item.tool, summary=tool.run(ctx, args), status="done", task_id=args.id), item.conversation_id
+            return Action(tool=item.tool, summary=tool.run(ctx, args), status="done", target_id=args.id), item.conversation_id
         except ToolError as error:
             db.rollback()
             return Action(tool=item.tool, summary=f"Couldn't do it: {error}", status="failed"), item.conversation_id

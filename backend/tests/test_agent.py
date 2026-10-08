@@ -2,11 +2,11 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from app.crud.task import create_task, get_task, get_tasks
-from app.crud.tracking import create_project
+from app.crud.tracking import create_goal, create_project, get_goal, get_goals, get_project, get_projects
 from app.models.conversation import Conversation
-from app.services.agent_service import AgentService, PendingActions
+from app.services.agent_service import AgentService, PendingActions, agent_edits
 from app.services.llm_service import LLMService
-from app.services.tracking_service import TrackingChanges, TrackingService
+from app.services.tracking_service import GoalChange, NewGoal, NewProject, ProjectChange, TrackingChanges, TrackingService
 from app.services.task_service import NewTask, TaskChange
 from tests.conftest import TEST_USER_ID
 
@@ -15,8 +15,8 @@ IST = timezone(timedelta(hours=5, minutes=30), "IST")
 NOW = datetime(2026, 10, 8, 10, 0, tzinfo=IST)  # Thursday
 
 
-def run(db, name, **arguments):
-    return AgentService.run_tool(db, TEST_USER_ID, name, arguments, NOW)
+def run(db, tool, **arguments):
+    return AgentService.run_tool(db, TEST_USER_ID, tool, arguments, NOW)
 
 
 # ---------- Tools ----------
@@ -105,10 +105,74 @@ def test_declined_and_expired_deletes_keep_the_task(db, monkeypatch):
     assert get_task(db, TEST_USER_ID, task.id) is not None
 
 
+def test_project_tools(db):
+    started, _ = run(db, "create_project", name="Portfolio", next_action="Pick a theme")
+    assert started.summary == "Started project “Portfolio” (next: Pick a theme)"
+    assert run(db, "create_project", name="portfolio")[0].summary == "Already a project: “portfolio”"
+
+    project = next(p for p in get_projects(db, TEST_USER_ID) if p.name == "Portfolio")
+
+    paused, _ = run(db, "update_project", id=project.id, status="paused")
+    assert paused.summary == "Paused project “Portfolio”" and paused.target_id == project.id
+
+    next_step, _ = run(db, "update_project", id=project.id, status="active", next_action="Write the about page")
+    assert next_step.summary == "Updated project “Portfolio” (next: Write the about page, active)"
+    assert get_project(db, TEST_USER_ID, project.id).status == "active"
+
+    held, _ = run(db, "delete_project", id=project.id)
+    assert held.status == "pending" and "its goals and tasks stay" in held.summary
+    assert get_project(db, TEST_USER_ID, project.id) is not None
+
+
+def test_goal_tools(db):
+    create_project(db, TEST_USER_ID, "Jarvis")
+
+    created, _ = run(db, "create_goal", title="Deploy Jarvis on a Pi", project="Jarvis", target_date="2026-11-30")
+    assert created.summary == "New goal “Deploy Jarvis on a Pi” (by 2026-11-30)"
+    goal = get_goals(db, TEST_USER_ID)[0]
+    assert goal.project_id is not None
+
+    progress, _ = run(db, "update_goal", id=goal.id, progress=60)
+    assert progress.summary == "Updated goal “Deploy Jarvis on a Pi” (60%, by 2026-11-30)"
+
+    done, _ = run(db, "update_goal", id=goal.id, status="completed")
+    assert done.summary == "Completed goal “Deploy Jarvis on a Pi”"
+    assert get_goal(db, TEST_USER_ID, goal.id).progress == 100
+
+    no_project, _ = run(db, "create_goal", title="Run 10k", project="Marathon")
+    bad_date, _ = run(db, "create_goal", title="Run 10k", target_date="soonish")
+    too_far, _ = run(db, "update_goal", id=goal.id, progress=150)
+    assert [a.status for a in (no_project, bad_date, too_far)] == ["failed"] * 3
+    assert "no project named 'Marathon'" in no_project.summary
+    assert len(get_goals(db, TEST_USER_ID)) == 1
+
+    held, _ = run(db, "delete_goal", id=goal.id)
+    outcome, _ = AgentService.resolve(db, TEST_USER_ID, held.pending_id, approve=True, now=NOW)
+    assert outcome.summary == "Deleted goal “Deploy Jarvis on a Pi”"
+    assert get_goal(db, TEST_USER_ID, goal.id) is None
+
+
+def test_agent_edits_groups_actions_by_kind():
+    edits = agent_edits([
+        {"tool": "create_task", "status": "done"},
+        {"tool": "update_goal", "status": "done", "target_id": 5},
+        {"tool": "delete_goal", "status": "pending", "target_id": 6},
+        {"tool": "update_task", "status": "done", "task_id": 9},  # logged before target_id
+        {"tool": "list_tasks", "status": "done"},
+    ])
+
+    assert edits == {"task": {9}, "goal": {5, 6}}
+    assert agent_edits(None) == {}
+
+
 def test_tool_schemas_describe_arguments():
     schemas = {s["function"]["name"]: s["function"] for s in AgentService.tool_schemas()}
 
-    assert set(schemas) == {"create_task", "update_task", "delete_task", "list_tasks"}
+    assert set(schemas) == {
+        "create_task", "update_task", "delete_task", "list_tasks",
+        "create_project", "update_project", "delete_project",
+        "create_goal", "update_goal", "delete_goal",
+    }
     assert schemas["create_task"]["parameters"]["required"] == ["title"]
     assert "remind_at" in schemas["create_task"]["parameters"]["properties"]
 
@@ -200,7 +264,7 @@ def test_chat_returns_and_logs_actions(client, db, monkeypatch):
 
     confirmed = client.post(f"/memory/chat/actions/{pending['pending_id']}", json={"approve": True}).json()
     assert confirmed == {
-        "tool": "delete_task", "summary": "Deleted “Old idea”", "status": "done", "pending_id": None, "task_id": task.id
+        "tool": "delete_task", "summary": "Deleted “Old idea”", "status": "done", "pending_id": None, "target_id": task.id
     }
 
     # The turn's log shows the outcome, also in history.
@@ -223,7 +287,7 @@ def test_tracker_backs_up_the_agent_without_duplicating_it(db):
 
     # The agent created "Email Raj" (worded its own way) and changed its
     # task: only the update it missed is applied.
-    log = TrackingService.apply(db, TEST_USER_ID, changes, NOW, agent_task_ids={agents.id})
+    log = TrackingService.apply(db, TEST_USER_ID, changes, NOW, agent_edits={"task": {agents.id}})
 
     assert log == [f"updated task {report.id}: {{'status': 'done'}}"]
     assert get_task(db, TEST_USER_ID, agents.id).status == "todo"
@@ -232,3 +296,26 @@ def test_tracker_backs_up_the_agent_without_duplicating_it(db):
     # Without agent actions it handles tasks fully, as before.
     TrackingService.apply(db, TEST_USER_ID, changes, NOW)
     assert "Email Raj" in {t.title for t in get_tasks(db, TEST_USER_ID)}
+
+
+def test_tracker_backs_up_the_agent_for_projects_and_goals(db):
+    jarvis = create_project(db, TEST_USER_ID, "Jarvis")
+    portfolio = create_project(db, TEST_USER_ID, "Portfolio")
+    pi = create_goal(db, TEST_USER_ID, "Deploy to Pi")
+    changes = TrackingChanges(
+        reasoning="",
+        new_projects=[NewProject(name="Blog")],
+        new_goals=[NewGoal(title="Ship Jarvis v1")],
+        project_updates=[ProjectChange(id=jarvis.id, status="paused"), ProjectChange(id=portfolio.id, status="completed")],
+        goal_updates=[GoalChange(id=pi.id, progress=30)],
+        new_tasks=[], task_updates=[]
+    )
+
+    # The agent changed the Jarvis project only; goals were untouched.
+    TrackingService.apply(db, TEST_USER_ID, changes, NOW, agent_edits={"project": {jarvis.id}})
+
+    assert get_project(db, TEST_USER_ID, jarvis.id).status == "active"
+    assert get_project(db, TEST_USER_ID, portfolio.id).status == "completed"
+    assert "Blog" not in {p.name for p in get_projects(db, TEST_USER_ID)}
+    assert get_goal(db, TEST_USER_ID, pi.id).progress == 30
+    assert "Ship Jarvis v1" in {g.title for g in get_goals(db, TEST_USER_ID)}

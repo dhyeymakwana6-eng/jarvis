@@ -26,14 +26,15 @@ export async function isOnline(): Promise<boolean> {
 }
 
 /** Sends one message; the persona answers using memories, profile, goals and tasks. */
-/** Something the assistant did (or wants to do) to the user's tasks. */
+/** Something the assistant did (or wants to do) to a task, project or goal. */
 export interface Action {
   tool: string;
   summary: string;
   // "pending" waits for the user's confirmation (e.g. deleting a task).
   status: "done" | "failed" | "pending" | "declined" | "expired";
   pending_id: string | null;
-  task_id: number | null;
+  // The existing item changed or deleted.
+  target_id: number | null;
 }
 
 export interface ChatReply {

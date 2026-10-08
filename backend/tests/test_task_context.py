@@ -18,7 +18,7 @@ def at(days=0, hour=0, minute=0):
 def context_of(db):
     """The chat context without task ids (they depend on the database)."""
     context = TaskService.to_context(db, TEST_USER_ID, NOW)
-    return context and re.sub(r"^- \[\d+\] ", "- ", context, flags=re.MULTILINE)
+    return context and re.sub(r"^- \[task \d+\] ", "- ", context, flags=re.MULTILINE)
 
 
 def test_context_groups_tasks_by_urgency(db):
@@ -99,7 +99,7 @@ def test_no_context_without_tasks(db):
 def test_tasks_carry_ids_for_the_agent_tools(db):
     task = create_task(db, TEST_USER_ID, "Call mom", priority="high")
 
-    assert f"- [{task.id}] [high] Call mom" in TaskService.to_context(db, TEST_USER_ID, NOW)
+    assert f"- [task {task.id}] [high] Call mom" in TaskService.to_context(db, TEST_USER_ID, NOW)
 
 
 def test_chat_prompt_includes_tasks(db, monkeypatch):

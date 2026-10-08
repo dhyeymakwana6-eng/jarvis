@@ -257,6 +257,17 @@ agent acted on tasks it skips new tasks (no duplicates) and the tasks the
 agent touched, and still applies changes the agent missed.
 `JARVIS_LIVE_LLM=1 pytest tests/test_agent_live.py` checks the real model.
 
+### Task 2 — Project and Goal Tools
+
+Status: Complete
+
+Tools to start, finish, pause, drop, resume and rename projects (and set
+their next step), and to add goals and update their progress, deadline
+and status; deleting either waits for CONFIRM. The chat context labels
+ids by type (`[task 7]`, `[project 3]`, `[goal 5]`). The tracker safety
+net works per kind: for each kind the agent acted on, it skips new items
+and the items the agent touched.
+
 ## Phase 18 — Automation Engine
 
 Status: Not Started
