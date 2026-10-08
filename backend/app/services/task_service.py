@@ -246,7 +246,7 @@ class TaskService:
         suffix = f" ({'; '.join(details)})" if details else ""
 
         # The id lets the chat model's tools refer to the task.
-        return f"- [{task.id}] {priority}{task.title}{suffix}"
+        return f"- [task {task.id}] {priority}{task.title}{suffix}"
 
     @staticmethod
     def _section(title: str, tasks: list[Task], now: datetime, project_names: dict[int, str]) -> str | None:

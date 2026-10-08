@@ -21,7 +21,7 @@ interface Message {
   // Assistant replies are labelled with the persona that gave them.
   role: "user" | Mode;
   text: string;
-  /** What the assistant did to the user's tasks with this reply. */
+  /** What the assistant did to tasks, projects or goals with this reply. */
   actions?: Action[];
 }
 

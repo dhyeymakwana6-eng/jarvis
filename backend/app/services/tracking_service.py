@@ -149,15 +149,21 @@ Task times (due_at, remind_at) are local times "YYYY-MM-DD HH:MM" computed from 
         user_id: int,
         changes: TrackingChanges,
         now: datetime | None = None,
-        agent_task_ids: set[int] | None = None
+        agent_edits: dict[str, set[int]] | None = None
     ) -> list[str]:
         """
         Applies LLM-proposed changes after validating them: ids must
         belong to the user, names already in use aren't re-created,
         and bad dates are dropped. Returns a log of what changed.
+
+        agent_edits: the kinds of item ("task", "project", "goal") the
+        chat agent already acted on this turn, with the ids it changed.
+        For those kinds, new items would duplicate its own and the items
+        it touched are settled; other changes (ones it missed) apply.
         """
         log = []
         created_projects = {}
+        changes = TrackingService._without_agent_edits(changes, agent_edits or {})
 
         for new in changes.new_projects:
             name = new.name.strip()
@@ -226,25 +232,30 @@ Task times (due_at, remind_at) are local times "YYYY-MM-DD HH:MM" computed from 
             if fields and update_goal(db, user_id, change.id, fields):
                 log.append(f"updated goal {change.id}: {fields}")
 
-        new_tasks, task_updates = changes.new_tasks, changes.task_updates
-
-        # The chat agent already acted on tasks this turn: new tasks
-        # would duplicate its own, and the tasks it touched are settled.
-        # Other updates ("I sent the report" it missed) still apply.
-        if agent_task_ids is not None:
-            new_tasks = []
-            task_updates = [change for change in task_updates if change.id not in agent_task_ids]
-
         log.extend(TaskService.apply_changes(
             db,
             user_id,
-            new_tasks,
-            task_updates,
+            changes.new_tasks,
+            changes.task_updates,
             created_projects,
             now or local_now()
         ))
 
         return log
+
+    @staticmethod
+    def _without_agent_edits(changes: TrackingChanges, edits: dict[str, set[int]]) -> TrackingChanges:
+        def updates(kind: str, items: list) -> list:
+            return [item for item in items if item.id not in edits[kind]] if kind in edits else items
+
+        return changes.model_copy(update={
+            "new_projects": [] if "project" in edits else changes.new_projects,
+            "new_goals": [] if "goal" in edits else changes.new_goals,
+            "new_tasks": [] if "task" in edits else changes.new_tasks,
+            "project_updates": updates("project", changes.project_updates),
+            "goal_updates": updates("goal", changes.goal_updates),
+            "task_updates": updates("task", changes.task_updates),
+        })
 
     # Phrased as a question but asking for something to be done.
     REQUEST = re.compile(
@@ -268,12 +279,11 @@ Task times (due_at, remind_at) are local times "YYYY-MM-DD HH:MM" computed from 
         user_id: int,
         message: str,
         now: datetime | None = None,
-        agent_task_ids: set[int] | None = None
+        agent_edits: dict[str, set[int]] | None = None
     ) -> list[str]:
         """
-        Asks the LLM what the message changes and applies it.
-        agent_task_ids is set when the chat agent already changed tasks
-        this turn (see apply).
+        Asks the LLM what the message changes and applies it, around
+        what the chat agent already did this turn (see apply).
         """
         if TrackingService.is_question(message):
             return []
@@ -289,7 +299,7 @@ Task times (due_at, remind_at) are local times "YYYY-MM-DD HH:MM" computed from 
         if changes is None:
             return []
 
-        return TrackingService.apply(db, user_id, changes, now, agent_task_ids)
+        return TrackingService.apply(db, user_id, changes, now, agent_edits)
 
     # ---------- Chat context ----------
 
@@ -310,7 +320,8 @@ Task times (due_at, remind_at) are local times "YYYY-MM-DD HH:MM" computed from 
                 if project.status != status:
                     continue
 
-                line = f"- {project.name}"
+                # Typed ids let the chat model's tools refer to items.
+                line = f"- [project {project.id}] {project.name}"
                 if project.next_action:
                     line += f" (next step: {project.next_action})"
                 lines.append(line)
@@ -340,7 +351,7 @@ Task times (due_at, remind_at) are local times "YYYY-MM-DD HH:MM" computed from 
             else:
                 details.append("no deadline")
 
-            goal_lines.append(f"- {goal.title} ({'; '.join(details)})")
+            goal_lines.append(f"- [goal {goal.id}] {goal.title} ({'; '.join(details)})")
 
         if goal_lines:
             sections.append("Open goals:\n" + "\n".join(goal_lines))

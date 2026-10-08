@@ -9,6 +9,8 @@ import os
 import pytest
 
 from app.crud.task import create_task, get_tasks
+from app.crud.tracking import create_goal, create_project, get_goal, get_goals, get_project, get_projects
+from app.services.agent_service import agent_edits
 from app.services.memory_service import MemoryService
 from app.services.tracking_service import TrackingService
 from tests.conftest import TEST_USER_ID
@@ -64,7 +66,7 @@ def test_two_changes_in_one_message(db, chat):
     # what the agent missed without duplicating what it did.
     TrackingService.process_message(
         db, TEST_USER_ID, message,
-        agent_task_ids={a.task_id for a in actions if a.task_id} if actions else None
+        agent_edits=agent_edits([a.model_dump() for a in actions])
     )
 
     assert "submit report" in titles(db, "done")
@@ -87,3 +89,45 @@ def test_questions_dont_act(db, chat, query):
     _, actions = chat(query)
 
     assert actions == []
+
+
+# ---------- Projects and goals ----------
+
+def test_starts_a_project(db, chat):
+    _, actions = chat("I started a new project called Portfolio")
+
+    assert [a.tool for a in actions] == ["create_project"]
+    assert "portfolio" in {p.name.lower() for p in get_projects(db, TEST_USER_ID)}
+
+
+def test_pauses_a_project(db, chat):
+    jarvis = create_project(db, TEST_USER_ID, "Jarvis")
+
+    chat("Put Jarvis on hold for now")
+
+    assert get_project(db, TEST_USER_ID, jarvis.id).status == "paused"
+
+
+def test_goal_progress(db, chat):
+    goal = create_goal(db, TEST_USER_ID, "Deploy Jarvis on a Raspberry Pi")
+
+    chat("I'm about 60% done with the Pi deployment")
+
+    assert get_goal(db, TEST_USER_ID, goal.id).progress == 60
+
+
+def test_new_goal_with_deadline(db, chat):
+    _, actions = chat("I want to run a half marathon by March next year")
+
+    assert [a.tool for a in actions] == ["create_goal"]
+    goal = get_goals(db, TEST_USER_ID)[0]
+    assert "marathon" in goal.title.lower() and "march" not in goal.title.lower() and (goal.target_date.month, goal.target_date.day) == (3, 31)
+
+
+def test_deleting_a_project_asks_first(db, chat):
+    project = create_project(db, TEST_USER_ID, "Portfolio")
+
+    _, actions = chat("Delete the Portfolio project")
+
+    assert [(a.tool, a.status) for a in actions] == [("delete_project", "pending")]
+    assert get_project(db, TEST_USER_ID, project.id) is not None
