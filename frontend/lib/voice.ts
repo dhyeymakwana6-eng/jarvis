@@ -20,13 +20,20 @@ const EFFECTS: Record<Mode, Effect> = {
   ultron: { playbackRate: 0.86, combDelay: 0.011, combFeedback: 0.45, combMix: 0.45, bassBoostDb: 5 },
 };
 
-export async function voiceAvailable(): Promise<Record<Mode, boolean>> {
+export interface VoiceStatus {
+  /** Which modes have a voice installed. */
+  available: Record<Mode, boolean>;
+  /** The wake word models are installed. */
+  wake_word: boolean;
+}
+
+export async function voiceStatus(): Promise<VoiceStatus> {
   try {
     const res = await fetch(`${BASE}/voice/status`, { cache: "no-store" });
     if (!res.ok) throw new Error();
-    return (await res.json()).available;
+    return await res.json();
   } catch {
-    return { jarvis: false, ultron: false };
+    return { available: { jarvis: false, ultron: false }, wake_word: false };
   }
 }
 
@@ -35,6 +42,7 @@ export class VoicePlayer {
   private source: AudioBufferSourceNode | null = null;
   private abort: AbortController | null = null;
   private rafId = 0;
+  private loading = false;
 
   constructor(private onLevel: (level: number) => void) {}
 
@@ -47,6 +55,11 @@ export class VoicePlayer {
     void this.ctx.resume();
   }
 
+  /** Fetching or playing speech. */
+  get speaking(): boolean {
+    return this.loading || this.source !== null;
+  }
+
   /** Speaks `text`, interrupting anything already playing. */
   async speak(text: string, mode: Mode): Promise<void> {
     this.stop();
@@ -56,15 +69,21 @@ export class VoicePlayer {
     const abort = new AbortController();
     this.abort = abort;
 
-    const res = await fetch(`${BASE}/voice/speak`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, mode }),
-      signal: abort.signal,
-    });
-    if (!res.ok) throw new Error(`voice ${res.status}`);
+    this.loading = true;
+    let audio: AudioBuffer;
+    try {
+      const res = await fetch(`${BASE}/voice/speak`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, mode }),
+        signal: abort.signal,
+      });
+      if (!res.ok) throw new Error(`voice ${res.status}`);
 
-    const audio = await ctx.decodeAudioData(await res.arrayBuffer());
+      audio = await ctx.decodeAudioData(await res.arrayBuffer());
+    } finally {
+      if (this.abort === abort) this.loading = false;
+    }
     if (abort.signal.aborted) return;
 
     const source = ctx.createBufferSource();
@@ -91,6 +110,7 @@ export class VoicePlayer {
   stop() {
     this.abort?.abort();
     this.abort = null;
+    this.loading = false;
     try {
       this.source?.stop();
     } catch {

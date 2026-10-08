@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createOrbScene, type OrbSceneApi } from "@/lib/orbScene";
 import { createBrainScene } from "@/lib/brainScene";
 import { loadMode, MODES, saveMode, type Mode } from "@/lib/mode";
-import { VoicePlayer, voiceAvailable } from "@/lib/voice";
+import { VoicePlayer, voiceStatus } from "@/lib/voice";
+import { canRecord } from "@/lib/speech";
 import type { Task } from "@/lib/jarvisApi";
 import { HandTracker, type TrackerStatus } from "@/lib/handTracker";
 import ChatPanel from "@/components/ChatPanel";
@@ -55,11 +56,16 @@ export default function JarvisOrb() {
   }, [voiceOn, mode]);
   useEffect(() => {
     voiceRef.current = new VoicePlayer((level) => sceneRef.current?.setVoiceLevel(level));
-    void voiceAvailable().then(setVoiceModes);
+    void voiceStatus().then((status) => {
+      setVoiceModes(status.available);
+      setWakeSupported(status.wake_word && canRecord());
+    });
     try {
       setVoiceOn(localStorage.getItem("jarvis.voice") === "on");
+      wakeOnRef.current = localStorage.getItem("jarvis.wake") === "on";
+      setWakeOn(wakeOnRef.current);
     } catch {
-      // Storage blocked: voice starts off.
+      // Storage blocked: voice and wake word start off.
     }
     return () => voiceRef.current?.stop();
   }, []);
@@ -74,6 +80,26 @@ export default function JarvisOrb() {
       // Not remembered; harmless.
     }
   }, []);
+
+  // ——— Wake word ———
+  // While on, the mic stays open and "Hey Jarvis" starts a hands-free
+  // recording (ChatPanel listens). Off by default.
+  const [wakeSupported, setWakeSupported] = useState(false);
+  const [wakeOn, setWakeOn] = useState(false);
+  const wakeOnRef = useRef(false);
+  const setWake = useCallback((on: boolean) => {
+    wakeOnRef.current = on;
+    setWakeOn(on);
+    try {
+      localStorage.setItem("jarvis.wake", on ? "on" : "off");
+    } catch {
+      // Not remembered; harmless.
+    }
+  }, []);
+  const toggleWake = useCallback(() => setWake(!wakeOnRef.current), [setWake]);
+  const isSpeaking = useCallback(() => voiceRef.current?.speaking ?? false, []);
+  const onWakeWordFailed = useCallback(() => setWake(false), [setWake]);
+
   const say = useCallback((text: string, as: Mode) => {
     if (!voiceOnRef.current) return;
     voiceRef.current?.speak(text, as).catch(() => {
@@ -224,6 +250,10 @@ export default function JarvisOrb() {
         case "V":
           toggleVoice();
           break;
+        case "w":
+        case "W":
+          if (wakeSupported) toggleWake();
+          break;
         case "Escape":
           voiceRef.current?.stop();
           break;
@@ -231,7 +261,7 @@ export default function JarvisOrb() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleGestures, toggleMode, toggleVoice]);
+  }, [toggleGestures, toggleMode, toggleVoice, toggleWake, wakeSupported]);
 
   const cameraOn = camera === "on";
 
@@ -253,6 +283,9 @@ export default function JarvisOrb() {
         onSend={onChatSend}
         onReply={say}
         onListenLevel={(level) => sceneRef.current?.setVoiceLevel(level)}
+        wakeWord={wakeSupported && wakeOn}
+        isSpeaking={isSpeaking}
+        onWakeWordFailed={onWakeWordFailed}
       />
 
       <ReminderCenter onAlert={flareForReminder} notify={notifyOn} />
@@ -276,6 +309,11 @@ export default function JarvisOrb() {
             <span className="key">M</span> mode&nbsp;&nbsp;
             <span className="key">V</span> voice&nbsp;&nbsp;
             <span className="key">SPACE</span> hold to talk
+            {wakeSupported && (
+              <>
+                &nbsp;&nbsp;<span className="key">W</span> wake word
+              </>
+            )}
           </div>
         )}
       </div>
@@ -318,6 +356,17 @@ export default function JarvisOrb() {
               }
             >
               {voiceOn ? "VOICE ON" : "VOICE OFF"}
+            </button>
+          )}
+          {wakeSupported && (
+            <button
+              type="button"
+              className="hud-btn"
+              aria-pressed={wakeOn}
+              onClick={toggleWake}
+              title='Listen for "Hey Jarvis" (W). The mic stays open while on; audio is checked locally and not kept.'
+            >
+              {wakeOn ? "WAKE ON" : "WAKE OFF"}
             </button>
           )}
         </div>
