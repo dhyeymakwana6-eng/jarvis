@@ -2,6 +2,8 @@
 // transcribes it. The mic is open only while recording.
 import { JarvisError } from "@/lib/jarvisApi";
 
+import { apiFetch } from "@/lib/auth";
+
 const BASE = "/api/jarvis";
 
 // Shorter presses are treated as accidental taps.
@@ -32,7 +34,7 @@ export function canRecord(): boolean {
 export async function transcribe(audio: Blob): Promise<string> {
   let res: Response;
   try {
-    res = await fetch(`${BASE}/voice/transcribe`, {
+    res = await apiFetch(`${BASE}/voice/transcribe`, {
       method: "POST",
       headers: { "Content-Type": audio.type || "application/octet-stream" },
       body: audio,

@@ -10,6 +10,7 @@ import type { RoutineRun, Task } from "@/lib/jarvisApi";
 import { HandTracker, type TrackerStatus } from "@/lib/handTracker";
 import ChatPanel from "@/components/ChatPanel";
 import ReminderCenter from "@/components/ReminderCenter";
+import { useAuth } from "@/components/AuthGate";
 
 type CameraState = "off" | "starting" | "on" | "error";
 
@@ -26,6 +27,7 @@ export default function JarvisOrb() {
   const sceneRef = useRef<OrbSceneApi | null>(null);
   const trackerRef = useRef<HandTracker | null>(null);
 
+  const auth = useAuth();
   const [camera, setCamera] = useState<CameraState>("off");
   const [status, setStatus] = useState<TrackerStatus>({ hands: 0, mode: "idle" });
   const [error, setError] = useState<string | null>(null);
@@ -335,6 +337,11 @@ export default function JarvisOrb() {
         </div>
 
         {error && <div className="hud-error">{error}</div>}
+        {auth.apiOpen && (
+          <div className="hud-error" title="Set JARVIS_PASSCODE in backend/.env and restart the backend">
+            API OPEN — NO PASSCODE SET
+          </div>
+        )}
 
         <div className="hud-row">
           <button
@@ -406,6 +413,11 @@ export default function JarvisOrb() {
           <button type="button" className="hud-btn" onClick={() => sceneRef.current?.resetView()}>
             RESET
           </button>
+          {auth.required && (
+            <button type="button" className="hud-btn" onClick={auth.lock} title="Sign out of this browser">
+              LOCK
+            </button>
+          )}
         </div>
       </div>
     </>

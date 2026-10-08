@@ -3,6 +3,8 @@
 // more low end. The analyser's level drives the orb while speaking.
 import type { Mode } from "@/lib/mode";
 
+import { apiFetch } from "@/lib/auth";
+
 const BASE = "/api/jarvis";
 
 interface Effect {
@@ -29,7 +31,7 @@ export interface VoiceStatus {
 
 export async function voiceStatus(): Promise<VoiceStatus> {
   try {
-    const res = await fetch(`${BASE}/voice/status`, { cache: "no-store" });
+    const res = await apiFetch(`${BASE}/voice/status`, { cache: "no-store" });
     if (!res.ok) throw new Error();
     return await res.json();
   } catch {
@@ -72,7 +74,7 @@ export class VoicePlayer {
     this.loading = true;
     let audio: AudioBuffer;
     try {
-      const res = await fetch(`${BASE}/voice/speak`, {
+      const res = await apiFetch(`${BASE}/voice/speak`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, mode }),
