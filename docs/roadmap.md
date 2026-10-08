@@ -270,7 +270,7 @@ and the items the agent touched.
 
 ## Phase 18 — Automation Engine
 
-Status: In Progress
+Status: Complete
 
 ### Task 1 — Repeating Tasks
 
@@ -288,7 +288,18 @@ picks. Needs `python -m app.models.migrate`.
 
 ### Task 2 — Routines (morning briefing, evening review)
 
-Status: Not Started
+Status: Complete
+
+A scheduler thread (started with the app) writes the morning briefing
+(overdue, today's tasks and reminders, goal deadlines) and evening review
+(done today, still open, tomorrow) at `JARVIS_MORNING_BRIEFING` /
+`JARVIS_EVENING_REVIEW` (default 08:00 / 21:00, `off` to disable). Facts
+come from the database; the local LLM words them in the persona last
+chatted with, falling back to the plain facts if Ollama is down. One run
+per routine per day (`routine_runs`), delivered up to 4 hours late if the
+backend was down. The HUD polls `/routines/due`, shows a card and speaks
+it when VOICE is on; `POST /routines/{morning|evening}/run` writes one on
+demand.
 
 ## Phase 19 — Raspberry Pi Deployment
 
