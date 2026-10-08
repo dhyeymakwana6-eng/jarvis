@@ -6,3 +6,4 @@ from .conversation import Conversation
 from .decision import Decision
 from .task import Task
 from .routine import RoutineRun
+from .auth_session import AuthSession

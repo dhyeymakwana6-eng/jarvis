@@ -3,6 +3,8 @@
 // openWakeWord model listens for "Hey Jarvis". Nothing is recorded or
 // kept; each window is scored and dropped.
 
+import { apiFetch } from "@/lib/auth";
+
 const BASE = "/api/jarvis";
 
 const RATE = 16_000;
@@ -166,7 +168,7 @@ export class WakeListener {
   private async check(pcm: Int16Array) {
     this.inFlight = true;
     try {
-      const res = await fetch(`${BASE}/voice/wake`, {
+      const res = await apiFetch(`${BASE}/voice/wake`, {
         method: "POST",
         headers: { "Content-Type": "application/octet-stream" },
         body: pcm.buffer as ArrayBuffer,

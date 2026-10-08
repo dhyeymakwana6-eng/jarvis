@@ -1,6 +1,8 @@
 // Client for the Jarvis backend, via the /api/jarvis proxy in next.config.ts.
 import type { Mode } from "@/lib/mode";
 
+import { apiFetch } from "@/lib/auth";
+
 const BASE = "/api/jarvis";
 
 export class JarvisError extends Error {}
@@ -18,7 +20,7 @@ async function detail(res: Response): Promise<string> {
 /** True if the backend answers its health check. */
 export async function isOnline(): Promise<boolean> {
   try {
-    const res = await fetch(BASE, { cache: "no-store" });
+    const res = await apiFetch(BASE, { cache: "no-store" });
     return res.ok;
   } catch {
     return false;
@@ -45,7 +47,7 @@ export interface ChatReply {
 export async function chat(query: string, mode: Mode, signal?: AbortSignal): Promise<ChatReply> {
   let res: Response;
   try {
-    res = await fetch(`${BASE}/memory/chat`, {
+    res = await apiFetch(`${BASE}/memory/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query, mode }),
@@ -70,7 +72,7 @@ export async function chat(query: string, mode: Mode, signal?: AbortSignal): Pro
 export async function resolveAction(pendingId: string, approve: boolean): Promise<Action> {
   let res: Response;
   try {
-    res = await fetch(`${BASE}/memory/chat/actions/${encodeURIComponent(pendingId)}`, {
+    res = await apiFetch(`${BASE}/memory/chat/actions/${encodeURIComponent(pendingId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ approve }),
@@ -96,7 +98,7 @@ export interface ChatTurn {
  * oldest first — the same turns Jarvis sees as context.
  */
 export async function getHistory(): Promise<ChatTurn[]> {
-  const res = await fetch(`${BASE}/memory/chat/history`, { cache: "no-store" });
+  const res = await apiFetch(`${BASE}/memory/chat/history`, { cache: "no-store" });
   if (!res.ok) throw new JarvisError(await detail(res));
   return (await res.json()) as ChatTurn[];
 }
@@ -111,7 +113,7 @@ export interface Task {
 }
 
 async function post(path: string, body?: unknown, method = "POST"): Promise<void> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await apiFetch(`${BASE}${path}`, {
     method,
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
@@ -122,7 +124,7 @@ async function post(path: string, body?: unknown, method = "POST"): Promise<void
 
 /** Reminders whose time has passed and that no device has handled yet. */
 export async function getDueReminders(): Promise<Task[]> {
-  const res = await fetch(`${BASE}/reminders/due`, { cache: "no-store" });
+  const res = await apiFetch(`${BASE}/reminders/due`, { cache: "no-store" });
   if (!res.ok) throw new JarvisError(await detail(res));
   return (await res.json()) as Task[];
 }
@@ -148,7 +150,7 @@ export interface RoutineRun {
 
 /** Today's routines that no device has dismissed yet. */
 export async function getDueRoutines(): Promise<RoutineRun[]> {
-  const res = await fetch(`${BASE}/routines/due`, { cache: "no-store" });
+  const res = await apiFetch(`${BASE}/routines/due`, { cache: "no-store" });
   if (!res.ok) throw new JarvisError(await detail(res));
   return (await res.json()) as RoutineRun[];
 }

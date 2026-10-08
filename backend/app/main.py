@@ -5,13 +5,15 @@ load_dotenv()
 import threading
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from app.api.memory import router as memory_router
 from app.api.profile import router as profile_router
 from app.api.tracking import projects_router, goals_router
 from app.api.task import router as task_router, reminders_router
 from app.api.voice import router as voice_router
 from app.api.routine import router as routine_router
+from app.api.auth import router as auth_router, require_auth
+from app.services.auth_service import AuthService
 from app.core.constants import DEFAULT_USER_ID
 from app.services.routine_service import RoutineScheduler
 from app.services.memory_extraction.pipeline import MemoryPipeline
@@ -35,6 +37,9 @@ async def lifespan(app: FastAPI):
         daemon=True
     ).start()
 
+    if not AuthService.required():
+        print("WARNING: JARVIS_PASSCODE is not set; the API is open to anyone who can reach it.")
+
     # Morning briefing / evening review at their times.
     scheduler = RoutineScheduler(DEFAULT_USER_ID)
     scheduler.start()
@@ -49,14 +54,19 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-app.include_router(memory_router)
-app.include_router(profile_router)
-app.include_router(projects_router)
-app.include_router(goals_router)
-app.include_router(task_router)
-app.include_router(reminders_router)
-app.include_router(voice_router)
-app.include_router(routine_router)
+# Everything but /auth and the health check needs a session once a
+# passcode is set (see AuthService).
+protected = [Depends(require_auth)]
+
+app.include_router(auth_router)
+app.include_router(memory_router, dependencies=protected)
+app.include_router(profile_router, dependencies=protected)
+app.include_router(projects_router, dependencies=protected)
+app.include_router(goals_router, dependencies=protected)
+app.include_router(task_router, dependencies=protected)
+app.include_router(reminders_router, dependencies=protected)
+app.include_router(voice_router, dependencies=protected)
+app.include_router(routine_router, dependencies=protected)
 
 
 @app.get("/")

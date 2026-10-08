@@ -29,6 +29,7 @@ cd backend
 python -m venv venv && source venv/bin/activate
 pip install -r requirements-dev.txt
 echo 'DATABASE_URL=postgresql+psycopg://USER:PASS@localhost:5432/jarvis' > .env
+echo 'JARVIS_PASSCODE=choose-a-passcode' >> .env   # see "Access" below
 python -m app.models.create_tables   # tables + default user
 python -m piper.download_voices --download-dir data/voices \
   en_GB-alan-medium en_US-ryan-medium   # JARVIS / ULTRON voices (~60 MB each)
@@ -125,6 +126,19 @@ Optional backend environment: `LLM_MODEL` (default `qwen3.5:9b`),
 **Security:** the API has no authentication. Keep it on localhost (the
 default) until auth exists; don't run uvicorn with `--host 0.0.0.0` on a
 shared network.
+
+## Access
+
+With `JARVIS_PASSCODE` set in `backend/.env`, the API (everything except
+`/` and `/auth`) needs a session: the HUD shows a passcode screen, and a
+correct passcode gives that browser a 30-day httpOnly cookie (only its
+hash is stored, in `auth_sessions`). **LOCK** signs the browser out. Five
+wrong passcodes in five minutes pause logins for the rest of the window.
+Scripts and other devices can send `Authorization: Bearer <token>` with
+`JARVIS_API_TOKEN` set. Without a passcode the API is open to anyone who
+can reach it, and the HUD says so (API OPEN). Over plain HTTP on a LAN
+the passcode and cookie travel unencrypted; serve HTTPS and set
+`JARVIS_COOKIE_SECURE=1` if that matters.
 
 ## Credits
 

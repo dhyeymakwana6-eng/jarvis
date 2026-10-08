@@ -42,6 +42,13 @@ def db():
         connection.close()
 
 
+@pytest.fixture(autouse=True)
+def no_passcode(monkeypatch):
+    """Auth is off in tests unless a test turns it on (a local .env may set it)."""
+    monkeypatch.delenv("JARVIS_PASSCODE", raising=False)
+    monkeypatch.delenv("JARVIS_API_TOKEN", raising=False)
+
+
 @pytest.fixture
 def client(db, monkeypatch):
     """API client whose requests use the rolled-back test session and user."""
