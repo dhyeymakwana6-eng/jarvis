@@ -6,7 +6,7 @@ import { createBrainScene } from "@/lib/brainScene";
 import { loadMode, MODES, saveMode, type Mode } from "@/lib/mode";
 import { VoicePlayer, voiceStatus } from "@/lib/voice";
 import { canRecord } from "@/lib/speech";
-import type { Task } from "@/lib/jarvisApi";
+import type { RoutineRun, Task } from "@/lib/jarvisApi";
 import { HandTracker, type TrackerStatus } from "@/lib/handTracker";
 import ChatPanel from "@/components/ChatPanel";
 import ReminderCenter from "@/components/ReminderCenter";
@@ -133,6 +133,10 @@ export default function JarvisOrb() {
   useEffect(() => () => {
     if (alertTimer.current) clearTimeout(alertTimer.current);
   }, []);
+  // A morning briefing / evening review: spoken in the persona that wrote it.
+  const deliverBriefing = useCallback((run: RoutineRun) => {
+    say(run.text, run.mode);
+  }, [say]);
 
   // Browser notifications need a secure context (localhost or HTTPS).
   const [notifySupported, setNotifySupported] = useState(false);
@@ -288,7 +292,7 @@ export default function JarvisOrb() {
         onWakeWordFailed={onWakeWordFailed}
       />
 
-      <ReminderCenter onAlert={flareForReminder} notify={notifyOn} />
+      <ReminderCenter onAlert={flareForReminder} onBriefing={deliverBriefing} notify={notifyOn} />
 
       <div className="hud hud-hint">
         <div>

@@ -106,6 +106,11 @@ Optional backend environment: `LLM_MODEL` (default `qwen3.5:9b`),
   out the trash every Monday and Thursday at 8pm", "every weekday at
   9:30". DONE schedules the next one; DISMISS on a plain repeating
   reminder moves it to its next time; "stop repeating …" ends it.
+- **Morning briefing and evening review** appear in the HUD (and are
+  spoken when VOICE is on) at 08:00 and 21:00: what's overdue, due and
+  reminded today, goal deadlines; then what you finished, what's left and
+  tomorrow. Set `JARVIS_MORNING_BRIEFING` / `JARVIS_EVENING_REVIEW` to
+  another `HH:MM` or `off`. `POST /routines/morning/run` writes one now.
 - **Wake word:** turn on **WAKE** (or `W`) and say "Hey Jarvis" (in
   either mode). A chime plays, you speak, and it sends when you pause.
   While on, the mic stays open and the latest 2.5s of audio goes to the

@@ -133,3 +133,24 @@ export const snoozeReminder = (id: number, minutes: number) =>
   post(`/reminders/${id}/snooze`, { minutes });
 
 export const completeTask = (id: number) => post(`/tasks/${id}`, { status: "done" }, "PATCH");
+
+/** A scheduled routine's text: the morning briefing or evening review. */
+export interface RoutineRun {
+  id: number;
+  kind: "morning" | "evening";
+  run_date: string;
+  text: string;
+  /** Persona it was written in (and should be spoken in). */
+  mode: Mode;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Today's routines that no device has dismissed yet. */
+export async function getDueRoutines(): Promise<RoutineRun[]> {
+  const res = await fetch(`${BASE}/routines/due`, { cache: "no-store" });
+  if (!res.ok) throw new JarvisError(await detail(res));
+  return (await res.json()) as RoutineRun[];
+}
+
+export const dismissRoutine = (id: number) => post(`/routines/runs/${id}/dismiss`);

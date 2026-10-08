@@ -150,6 +150,18 @@ Rules:
             ) from error
 
 
+    def generate_text(self, system_prompt: str, user_content: str) -> str:
+        """A plain completion (no memories or tools). Raises LLMUnavailableError."""
+        response = self._chat(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content}
+            ],
+            None
+        )
+
+        return (response.message.content or "").strip()
+
     def generate_structured(
         self,
         system_prompt: str,

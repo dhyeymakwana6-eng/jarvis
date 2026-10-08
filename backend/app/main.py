@@ -11,6 +11,9 @@ from app.api.profile import router as profile_router
 from app.api.tracking import projects_router, goals_router
 from app.api.task import router as task_router, reminders_router
 from app.api.voice import router as voice_router
+from app.api.routine import router as routine_router
+from app.core.constants import DEFAULT_USER_ID
+from app.services.routine_service import RoutineScheduler
 from app.services.memory_extraction.pipeline import MemoryPipeline
 from app.database.connection import SessionLocal
 from app.database.seed import ensure_default_user
@@ -32,7 +35,13 @@ async def lifespan(app: FastAPI):
         daemon=True
     ).start()
 
+    # Morning briefing / evening review at their times.
+    scheduler = RoutineScheduler(DEFAULT_USER_ID)
+    scheduler.start()
+
     yield
+
+    scheduler.stop()
 
 app = FastAPI(
     title="Jarvis",
@@ -47,6 +56,7 @@ app.include_router(goals_router)
 app.include_router(task_router)
 app.include_router(reminders_router)
 app.include_router(voice_router)
+app.include_router(routine_router)
 
 
 @app.get("/")
