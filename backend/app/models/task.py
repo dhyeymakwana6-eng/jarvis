@@ -43,4 +43,9 @@ class Task(Base, TimestampMixin):
 
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Repeat rule (app.core.recurrence), e.g. "daily" or "weekly:mon,thu".
+    # Completing the task creates the next occurrence; dismissing the
+    # reminder of one without a deadline moves it to the next time.
+    recurrence: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

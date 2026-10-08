@@ -102,6 +102,10 @@ Optional backend environment: `LLM_MODEL` (default `qwen3.5:9b`),
   Portfolio", "put Jarvis on hold", "I'm 60% done with the Pi goal"), and
   it does so with tools before replying; what it did is listed under the
   reply. Deleting asks you to CONFIRM first.
+- **Repeating reminders:** "remind me to stretch every day at 4", "take
+  out the trash every Monday and Thursday at 8pm", "every weekday at
+  9:30". DONE schedules the next one; DISMISS on a plain repeating
+  reminder moves it to its next time; "stop repeating …" ends it.
 - **Wake word:** turn on **WAKE** (or `W`) and say "Hey Jarvis" (in
   either mode). A chime plays, you speak, and it sends when you pause.
   While on, the mic stays open and the latest 2.5s of audio goes to the

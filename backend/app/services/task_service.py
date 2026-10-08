@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.clock import local_now
+from app.core.recurrence import describe as describe_recurrence
 from app.crud.task import create_task, get_task, get_tasks, find_task_by_title, update_task
 from app.crud.tracking import get_projects, get_project, find_project_by_name
 from app.models.project import Project
@@ -238,6 +239,9 @@ class TaskService:
 
         if task.remind_at and task.reminded_at is None and task.remind_at > now:
             details.append(f"reminder {TaskService._time(task.remind_at, now)}")
+
+        if task.recurrence:
+            details.append(f"repeats {describe_recurrence(task.recurrence)}")
 
         if task.project_id in project_names:
             details.append(f"project: {project_names[task.project_id]}")
