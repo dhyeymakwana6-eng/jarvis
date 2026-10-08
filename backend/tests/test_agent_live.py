@@ -5,10 +5,11 @@ needs Ollama, so it's opt-in:
     JARVIS_LIVE_LLM=1 python -m pytest tests/test_agent_live.py
 """
 import os
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.crud.task import create_task, get_tasks
+from app.crud.task import create_task, get_task, get_tasks
 from app.crud.tracking import create_goal, create_project, get_goal, get_goals, get_project, get_projects
 from app.services.agent_service import agent_edits
 from app.services.memory_service import MemoryService
@@ -131,3 +132,26 @@ def test_deleting_a_project_asks_first(db, chat):
 
     assert [(a.tool, a.status) for a in actions] == [("delete_project", "pending")]
     assert get_project(db, TEST_USER_ID, project.id) is not None
+
+
+# ---------- Repeating tasks ----------
+
+@pytest.mark.parametrize("query, rule", [
+    ("Remind me to stretch every day at 4 pm", "daily"),
+    ("Remind me to take out the trash every Monday and Thursday at 8pm", "weekly:mon,thu"),
+    ("Every weekday at 9:30 remind me to do the stand-up", "weekdays"),
+])
+def test_creates_a_repeating_reminder(db, chat, query, rule):
+    _, actions = chat(query)
+
+    assert [a.tool for a in actions] == ["create_task"]
+    task = get_tasks(db, TEST_USER_ID, status="todo")[0]
+    assert task.recurrence == rule and task.remind_at is not None
+
+
+def test_stops_a_repeat(db, chat):
+    task = create_task(db, TEST_USER_ID, "Stretch", remind_at=datetime.now(timezone.utc) + timedelta(hours=3), recurrence="daily")
+
+    chat("Stop repeating the stretch reminder, I only need it today")
+
+    assert get_task(db, TEST_USER_ID, task.id).recurrence is None

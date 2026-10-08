@@ -8,6 +8,7 @@ from typing import Callable, Literal
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
+from app.core import recurrence
 from app.core.clock import local_now
 from app.crud.task import create_task, delete_task, find_task_by_title, get_task, get_tasks, update_task
 from app.crud.tracking import (
@@ -38,6 +39,7 @@ class CreateTaskArgs(BaseModel):
     remind_at: str | None = Field(None, description=f"when to remind the user; always set for \"remind me\", {LocalTime}")
     priority: Priority | None = Field(None, description="only if the user says it's urgent/important or not")
     project: str | None = Field(None, description="name of one of the user's projects it belongs to")
+    repeat: str | None = Field(None, description=f"only if it repeats: {recurrence.FORMATS}")
 
 
 class UpdateTaskArgs(BaseModel):
@@ -49,6 +51,7 @@ class UpdateTaskArgs(BaseModel):
     due_at: str | None = Field(None, description=f"new deadline, {LocalTime}")
     remind_at: str | None = Field(None, description=f"new reminder time, {LocalTime}")
     priority: Priority | None = None
+    repeat: str | None = Field(None, description=f"new repeat rule ({recurrence.FORMATS}), or none to stop repeating")
 
 
 class TaskIdArgs(BaseModel):
@@ -151,6 +154,8 @@ def _describe(task, now: datetime) -> str:
         details.append(f"due {_when(task.due_at, now)}")
     if task.remind_at and task.reminded_at is None:
         details.append(f"reminder {_when(task.remind_at, now)}")
+    if task.recurrence:
+        details.append(f"repeats {recurrence.describe(task.recurrence)}")
 
     return f"“{task.title}”" + (f" ({', '.join(details)})" if details else "")
 
@@ -178,6 +183,16 @@ def _time_arg(value: str | None, ctx: ToolContext, *, reminder: bool) -> datetim
     return moment
 
 
+def _repeat_arg(value: str | None) -> str | None:
+    """A normalized rule; None for no repeat ("none", "never", "")."""
+    if not value or value.strip().lower() in ("none", "never", "no", "stop", "once"):
+        return None
+    try:
+        return recurrence.normalize(value)
+    except recurrence.RecurrenceError as error:
+        raise ToolError(str(error))
+
+
 def _create_task(ctx: ToolContext, args: CreateTaskArgs) -> str:
     title = args.title.strip()[:300]
     if not title:
@@ -196,7 +211,8 @@ def _create_task(ctx: ToolContext, args: CreateTaskArgs) -> str:
         project_id=project.id if project else None,
         priority=args.priority or "normal",
         due_at=_time_arg(args.due_at, ctx, reminder=False),
-        remind_at=_time_arg(args.remind_at, ctx, reminder=True)
+        remind_at=_time_arg(args.remind_at, ctx, reminder=True),
+        recurrence=_repeat_arg(args.repeat)
     )
 
     return f"Added {_describe(task, ctx.now)}"
@@ -216,15 +232,27 @@ def _update_task(ctx: ToolContext, args: UpdateTaskArgs) -> str:
         fields["due_at"] = _time_arg(args.due_at, ctx, reminder=False)
     if args.remind_at:
         fields["remind_at"] = _time_arg(args.remind_at, ctx, reminder=True)
+    if args.repeat:
+        fields["recurrence"] = _repeat_arg(args.repeat)
 
     if not fields:
         raise ToolError("nothing to change")
 
     task = update_task(ctx.db, ctx.user_id, task.id, fields)
 
+    if fields.keys() == {"recurrence"} and task.recurrence is None:
+        return f"Stopped repeating “{task.title}”"
+
     if fields.keys() == {"status"}:
         verb = {"done": "Completed", "cancelled": "Cancelled", "todo": "Reopened"}[args.status]
-        return f"{verb} “{task.title}”"
+        summary = f"{verb} “{task.title}”"
+
+        # Completing a repeating task created its next occurrence.
+        upcoming = find_task_by_title(ctx.db, ctx.user_id, task.title) if args.status == "done" and task.recurrence else None
+        if upcoming:
+            summary += f"; next one {_when(upcoming.due_at or upcoming.remind_at, ctx.now)}"
+
+        return summary
 
     return f"Updated {_describe(task, ctx.now)}" + (f", now {task.status}" if args.status else "")
 

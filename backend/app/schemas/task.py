@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+
+from app.core import recurrence
 
 
 TaskStatus = Literal["todo", "done", "cancelled"]
@@ -13,6 +15,11 @@ Priority = Literal["low", "normal", "high"]
 # reminder fires at the moment the user meant, whatever the server's
 # timezone.
 
+def _valid_recurrence(value: str | None) -> str | None:
+    # "" or null means no repeat; anything else must be a known rule.
+    return recurrence.normalize(value) if value else None
+
+
 class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     notes: str | None = None
@@ -21,6 +28,10 @@ class TaskCreate(BaseModel):
     priority: Priority = "normal"
     due_at: AwareDatetime | None = None
     remind_at: AwareDatetime | None = None
+    # Repeat rule, e.g. "daily", "weekdays", "weekly:mon,thu" (app.core.recurrence).
+    recurrence: str | None = None
+
+    _check_recurrence = field_validator("recurrence")(_valid_recurrence)
 
 
 class TaskUpdate(BaseModel):
@@ -32,6 +43,10 @@ class TaskUpdate(BaseModel):
     priority: Priority | None = None
     due_at: AwareDatetime | None = None
     remind_at: AwareDatetime | None = None
+    # null stops it repeating.
+    recurrence: str | None = None
+
+    _check_recurrence = field_validator("recurrence")(_valid_recurrence)
 
 
 class TaskResponse(BaseModel):
@@ -46,6 +61,7 @@ class TaskResponse(BaseModel):
     due_at: datetime | None
     remind_at: datetime | None
     reminded_at: datetime | None
+    recurrence: str | None
     completed_at: datetime | None
     created_at: datetime
     updated_at: datetime

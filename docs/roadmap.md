@@ -270,6 +270,24 @@ and the items the agent touched.
 
 ## Phase 18 — Automation Engine
 
+Status: In Progress
+
+### Task 1 — Repeating Tasks
+
+Status: Complete
+
+Tasks can repeat (`tasks.recurrence`: daily, weekdays, weekly:mon,thu,
+days:N, monthly/monthly:D; app/core/recurrence.py). Completing one marks
+it done and creates the next occurrence; dismissing a repeating reminder
+without a deadline moves it to its next time; cancelling stops it. Missed
+occurrences are skipped, times keep their local wall-clock time across
+DST, and weekly/monthly rules are pinned to their day. The chat agent
+sets and stops repeats (`repeat` on create_task/update_task); weekday
+rules start on the first allowed day regardless of the date the model
+picks. Needs `python -m app.models.migrate`.
+
+### Task 2 — Routines (morning briefing, evening review)
+
 Status: Not Started
 
 ## Phase 19 — Raspberry Pi Deployment
