@@ -8,6 +8,11 @@ from app.database.connection import get_db
 from app.schemas.chat import Mode
 from app.services.speech_service import SpeechService, SpeechUnavailableError, SpeechInputError
 from app.services.voice_service import VoiceService, VoiceUnavailableError
+from app.services.wake_word_service import (
+    WakeWordInputError,
+    WakeWordService,
+    WakeWordUnavailableError
+)
 
 router = APIRouter(
     prefix="/voice",
@@ -22,8 +27,12 @@ class SpeakRequest(BaseModel):
 
 @router.get("/status")
 def voice_status():
-    # Which modes have a voice model installed.
-    return {"available": VoiceService.available()}
+    # Which modes have a voice model installed, and whether the wake
+    # word can be used.
+    return {
+        "available": VoiceService.available(),
+        "wake_word": WakeWordService.available()
+    }
 
 
 @router.post(
@@ -75,3 +84,27 @@ async def transcribe_endpoint(
         raise HTTPException(status_code=422, detail=str(error))
 
     return {"text": text}
+
+
+# 4s of 16-bit 16 kHz audio; the browser sends 2.5s.
+MAX_WAKE_WINDOW_BYTES = 4 * 16_000 * 2
+
+
+@router.post("/wake")
+async def wake_endpoint(request: Request):
+    """
+    Wake word check. The body is the latest ~2.5s of mic audio as raw
+    16-bit little-endian mono PCM at 16 kHz; the browser posts it every
+    half second while the wake word is on.
+    """
+    pcm = await request.body()
+
+    if len(pcm) > MAX_WAKE_WINDOW_BYTES:
+        raise HTTPException(status_code=413, detail="Audio window too long")
+
+    try:
+        return await run_in_threadpool(WakeWordService.detect, pcm)
+    except WakeWordUnavailableError as error:
+        raise HTTPException(status_code=503, detail=str(error))
+    except WakeWordInputError as error:
+        raise HTTPException(status_code=422, detail=str(error))

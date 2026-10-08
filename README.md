@@ -34,6 +34,7 @@ python -m piper.download_voices --download-dir data/voices \
   en_GB-alan-medium en_US-ryan-medium   # JARVIS / ULTRON voices (~60 MB each)
 # Speech-to-text (base.en, ~140 MB) downloads into data/whisper on first use.
 # Note: faster-whisper 1.2.1 needs av<18 (pinned to 17.1.0).
+python -m scripts.download_wake_word # "Hey Jarvis" wake word models (~4 MB)
 python -m app.models.migrate         # new tables/columns, indexes, embeddings
                                      # (re-run after pulling new versions)
 python -m pytest                     # optional
@@ -95,6 +96,13 @@ Optional backend environment: `LLM_MODEL` (default `qwen3.5:9b`),
   speak, release. Whisper transcribes it locally and sends it. The mic is
   open only while held, and needs localhost or HTTPS (not plain
   `http://<LAN IP>`). `WHISPER_MODEL` picks the model (e.g. `small.en`).
+- **Wake word:** turn on **WAKE** (or `W`) and say "Hey Jarvis" (in
+  either mode). A chime plays, you speak, and it sends when you pause.
+  While on, the mic stays open and the latest 2.5s of audio goes to the
+  backend every half second, where openWakeWord's local model scores it;
+  nothing is stored. It pauses while recording, thinking or speaking.
+  `WAKE_WORD_THRESHOLD` (default `0.5`) trades misses for false wakes.
+  The pretrained models are CC BY-NC-SA 4.0 (non-commercial use).
 - Drag / scroll to spin and zoom the orb, `G` for webcam hand gestures,
   `R` to reset.
 - API docs: http://localhost:8000/docs

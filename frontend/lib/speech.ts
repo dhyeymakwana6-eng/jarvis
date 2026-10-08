@@ -7,6 +7,20 @@ const BASE = "/api/jarvis";
 // Shorter presses are treated as accidental taps.
 const MIN_RECORDING_MS = 300;
 
+// Hands-free (after the wake word) there's no release, so the recording
+// ends on a pause: speech, then this much quiet. Levels are the meter's 0..1.
+const SPEECH_LEVEL = 0.2;
+const QUIET_LEVEL = 0.1;
+const END_PAUSE_MS = 1200;
+// Gives up if nothing is said, and caps a long monologue.
+const NO_SPEECH_MS = 5000;
+const MAX_HANDS_FREE_MS = 20_000;
+
+export interface HandsFree {
+  /** The user finished speaking (or never started): call stop(). */
+  onEnd(spoke: boolean): void;
+}
+
 /** The browser can record (mic access needs localhost or HTTPS). */
 export function canRecord(): boolean {
   return typeof window !== "undefined"
@@ -37,8 +51,9 @@ export class Recorder {
   private chunks: Blob[] = [];
   private startedAt = 0;
   private ctx: AudioContext | null = null;
-  private rafId = 0;
+  private timer: ReturnType<typeof setInterval> | undefined;
   private cancelled = false;
+  private handsFree: HandsFree | null = null;
 
   constructor(private onLevel: (level: number) => void) {}
 
@@ -46,10 +61,14 @@ export class Recorder {
     return this.recorder !== null;
   }
 
-  /** Opens the mic and starts recording (asks permission the first time). */
-  async start(): Promise<void> {
+  /**
+   * Opens the mic and starts recording (asks permission the first time).
+   * With `handsFree`, it also listens for the end of speech.
+   */
+  async start(handsFree?: HandsFree): Promise<void> {
     if (this.recorder) return;
     this.cancelled = false;
+    this.handsFree = handsFree ?? null;
 
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -90,12 +109,13 @@ export class Recorder {
   }
 
   private release() {
-    cancelAnimationFrame(this.rafId);
+    clearInterval(this.timer);
     this.stream?.getTracks().forEach((t) => t.stop());
     void this.ctx?.close();
     this.ctx = null;
     this.stream = null;
     this.recorder = null;
+    this.handsFree = null;
     this.onLevel(0);
   }
 
@@ -107,6 +127,8 @@ export class Recorder {
     this.ctx.createMediaStreamSource(stream).connect(analyser);
     const samples = new Float32Array(analyser.fftSize);
     let level = 0;
+    let spoke = false;
+    let quietSince = 0;
 
     const tick = () => {
       analyser.getFloatTimeDomainData(samples);
@@ -114,8 +136,30 @@ export class Recorder {
       for (const s of samples) sum += s * s;
       level += (Math.min(1, Math.sqrt(sum / samples.length) * 6) - level) * 0.35;
       this.onLevel(level);
-      this.rafId = requestAnimationFrame(tick);
+
+      const handsFree = this.handsFree;
+      if (handsFree) {
+        const now = performance.now();
+        const elapsed = now - this.startedAt;
+        if (level > SPEECH_LEVEL) {
+          spoke = true;
+          quietSince = 0;
+        } else if (spoke && level < QUIET_LEVEL) {
+          quietSince ||= now;
+        }
+        const ended =
+          (spoke && quietSince > 0 && now - quietSince >= END_PAUSE_MS)
+          || (!spoke && elapsed >= NO_SPEECH_MS)
+          || elapsed >= MAX_HANDS_FREE_MS;
+        if (ended) {
+          this.handsFree = null; // report once
+          handsFree.onEnd(spoke);
+        }
+      }
+
     };
-    tick();
+    // A timer, not animation frames: those stop in a background tab,
+    // and a hands-free recording there must still end.
+    this.timer = setInterval(tick, 33);
   }
 }

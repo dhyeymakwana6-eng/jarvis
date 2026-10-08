@@ -63,7 +63,7 @@ def test_missing_voice_model_is_a_503_with_a_download_hint(client, monkeypatch, 
 
     assert response.status_code == 503
     assert "piper.download_voices" in response.json()["detail"]
-    assert client.get("/voice/status").json() == {"available": {"jarvis": False, "ultron": False}}
+    assert client.get("/voice/status").json()["available"] == {"jarvis": False, "ultron": False}
 
 
 @pytest.mark.skipif(not VoiceService.model_path("jarvis").exists(), reason="voice model not downloaded")

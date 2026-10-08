@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { chat, getHistory, isOnline, JarvisError } from "@/lib/jarvisApi";
 import { MODES, type Mode } from "@/lib/mode";
 import { canRecord, Recorder, transcribe } from "@/lib/speech";
+import { WakeListener } from "@/lib/wake";
 
 type MicState = "idle" | "listening" | "transcribing";
 
@@ -25,9 +26,17 @@ interface ChatPanelProps {
   onReply?(text: string, mode: Mode): void;
   /** Mic loudness 0..1 while the user is talking, for the scene. */
   onListenLevel?(level: number): void;
+  /** Listen for "Hey Jarvis", then record hands-free. */
+  wakeWord?: boolean;
+  /** Replies are being spoken (the wake word pauses meanwhile). */
+  isSpeaking?(): boolean;
+  /** The wake word stopped working (e.g. models missing, mic blocked). */
+  onWakeWordFailed?(): void;
 }
 
-export default function ChatPanel({ mode, onThinkingChange, onSend, onReply, onListenLevel }: ChatPanelProps) {
+export default function ChatPanel({
+  mode, onThinkingChange, onSend, onReply, onListenLevel, wakeWord = false, isSpeaking, onWakeWordFailed,
+}: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
@@ -38,6 +47,10 @@ export default function ChatPanel({ mode, onThinkingChange, onSend, onReply, onL
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const nextId = useRef(0);
+  const pendingRef = useRef(false);
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,23 +151,37 @@ export default function ChatPanel({ mode, onThinkingChange, onSend, onReply, onL
     return () => void recorderRef.current?.stop();
   }, []);
 
+  const [handsFree, setHandsFree] = useState(false);
   const micRef = useRef<MicState>("idle");
   const updateMic = (state: MicState) => {
     micRef.current = state;
     setMic(state);
   };
 
-  async function startTalking() {
+  // Hands-free (after the wake word) it stops by itself on a pause.
+  async function startTalking(wake = false) {
     if (micRef.current !== "idle" || pending) return;
-    onSend?.(); // stops speech, unlocks audio (this is a user gesture)
+    onSend?.(); // stops speech, unlocks audio (a user gesture when pressed)
     setError(null);
+    setHandsFree(wake);
     updateMic("listening");
     try {
-      await recorderRef.current?.start();
+      await recorderRef.current?.start(
+        wake
+          ? { onEnd: (spoke) => void (spoke ? stopRef.current() : cancelRef.current()) }
+          : undefined,
+      );
     } catch {
       updateMic("idle");
       setError("MICROPHONE BLOCKED");
     }
+  }
+
+  // Woken but nothing was said: drop it quietly.
+  async function cancelTalking() {
+    if (micRef.current !== "listening") return;
+    await recorderRef.current?.stop();
+    updateMic("idle");
   }
 
   async function stopTalking() {
@@ -177,10 +204,42 @@ export default function ChatPanel({ mode, onThinkingChange, onSend, onReply, onL
   }
   const startRef = useRef(startTalking);
   const stopRef = useRef(stopTalking);
+  const cancelRef = useRef(cancelTalking);
   useEffect(() => {
     startRef.current = startTalking;
     stopRef.current = stopTalking;
+    cancelRef.current = cancelTalking;
   });
+
+  // ——— Wake word ———
+  // "Hey Jarvis" starts a hands-free recording. Paused while recording,
+  // waiting for a reply or speaking one.
+  const isSpeakingRef = useRef(isSpeaking);
+  const wakeFailedRef = useRef(onWakeWordFailed);
+  useEffect(() => {
+    isSpeakingRef.current = isSpeaking;
+    wakeFailedRef.current = onWakeWordFailed;
+  });
+  useEffect(() => {
+    if (!wakeWord || !micSupported) return;
+    const listener = new WakeListener({
+      active: () => micRef.current === "idle" && !pendingRef.current && !isSpeakingRef.current?.(),
+      onWake: () => {
+        listener.chime();
+        void startRef.current(true);
+      },
+      onError: (err) => {
+        setError(err.message);
+        wakeFailedRef.current?.();
+      },
+    });
+    listener.start().catch(() => {
+      listener.stop();
+      setError("MICROPHONE BLOCKED");
+      wakeFailedRef.current?.();
+    });
+    return () => listener.stop();
+  }, [wakeWord, micSupported]);
 
   // Space: hold to talk, unless typing or on a button.
   useEffect(() => {
@@ -206,9 +265,9 @@ export default function ChatPanel({ mode, onThinkingChange, onSend, onReply, onL
   }, [micSupported]);
 
   const placeholder =
-    mic === "listening" ? "LISTENING…  (release to send)"
+    mic === "listening" ? (handsFree ? "LISTENING…  (pause to send)" : "LISTENING…  (release to send)")
     : mic === "transcribing" ? "TRANSCRIBING…"
-    : `Message ${mode === "ultron" ? "Ultron" : "Jarvis"}…  ( / )`;
+    : `Message ${mode === "ultron" ? "Ultron" : "Jarvis"}…  ( / )${wakeWord ? "  or say “Hey Jarvis”" : ""}`;
 
   const statusLabel = online === null ? "CONNECTING…" : online ? "ONLINE" : "OFFLINE";
 

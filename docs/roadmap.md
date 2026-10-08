@@ -219,7 +219,7 @@ gives each mode its own voice.
 
 ## Phase 16 — Voice System
 
-Status: In Progress (fully local)
+Status: Complete (fully local)
 
 ### Task 1 — Spoken Replies (Piper TTS, a voice per mode)
 
@@ -231,7 +231,13 @@ Status: Complete
 
 ### Task 3 — Wake Word (optional)
 
-Status: Not Started
+Status: Complete
+
+"Hey Jarvis" with openWakeWord's pretrained ONNX models, run directly with
+onnxruntime (no new dependencies). The browser streams 16 kHz audio windows
+to `POST /voice/wake`; a detection chimes and starts a hands-free recording
+that ends on a pause. Off by default (WAKE / `W`), paused while recording,
+waiting for a reply or speaking.
 
 ## Phase 17 — Agent Framework
 
