@@ -9,6 +9,8 @@ from app.services.profile_service import ProfileService
 from app.services.tracking_service import TrackingService
 from app.services.task_service import TaskService
 from app.services.conversation_history import ConversationHistory
+from app.services.agent_service import Action, AgentService
+from app.core.clock import clock_context, local_now
 
 class MemoryService:
 
@@ -84,8 +86,13 @@ class MemoryService:
         db: Session,
         user_id: int,
         query: str,
-        mode: str = "jarvis"
+        mode: str = "jarvis",
+        actions: list[Action] | None = None
     ):
+        """
+        The reply to query. Given an `actions` list, the model may also
+        act on the user's tasks; what it did is appended there.
+        """
 
         context = MemoryService.get_context(
             db,
@@ -97,6 +104,11 @@ class MemoryService:
 
         llm = LLMService()
 
+        def run_tool(name: str, arguments: dict) -> str:
+            action, result = AgentService.run_tool(db, user_id, name, arguments)
+            actions.append(action)
+            return result
+
         return llm.generate_response(
             user_query=query,
             memory_context=context,
@@ -106,5 +118,8 @@ class MemoryService:
             tracking_context=TrackingService.to_context(db, user_id),
             task_context=TaskService.to_context(db, user_id),
             history=ConversationHistory.for_prompt(db, user_id),
-            mode=mode
+            mode=mode,
+            clock_context=clock_context(local_now()),
+            tools=AgentService.tool_schemas() if actions is not None else None,
+            run_tool=run_tool if actions is not None else None
         )

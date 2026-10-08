@@ -17,6 +17,8 @@ from app.services.conversation_history import ConversationHistory
 
 from app.services.memory_extraction.pipeline import MemoryPipeline
 
+from app.services.agent_service import Action, AgentService, PendingActions
+
 from app.schemas.memory import (
     MemoryCreate,
     MemoryUpdate,
@@ -24,6 +26,7 @@ from app.schemas.memory import (
     MemorySearchResult
 )
 from app.schemas.chat import (
+    ActionDecision,
     ChatRequest,
     ChatResponse,
     ChatTurn
@@ -178,12 +181,15 @@ def chat_endpoint(
 ):
     # Retrieve context before storing this message, so the user's
     # own message isn't fed back to the LLM as a "known fact".
+    actions: list[Action] = []
+
     try:
         response = MemoryService.generate_response(
             db,
             DEFAULT_USER_ID,
             request.query,
-            request.mode
+            request.mode,
+            actions=actions
         )
     except LLMUnavailableError as error:
         raise HTTPException(
@@ -198,10 +204,16 @@ def chat_endpoint(
         user_id=DEFAULT_USER_ID,
         user_message=request.query,
         assistant_message=response,
-        mode=request.mode
+        mode=request.mode,
+        actions=[action.model_dump() for action in actions] or None
     )
     db.add(conversation)
     db.commit()
+
+    PendingActions.attach(
+        [action.pending_id for action in actions if action.pending_id],
+        conversation.id
+    )
 
     background_tasks.add_task(
         MemoryPipeline.process_conversation,
@@ -209,8 +221,39 @@ def chat_endpoint(
     )
 
     return ChatResponse(
-        response=response
+        response=response,
+        actions=actions
     )
+
+@router.post(
+    "/chat/actions/{pending_id}",
+    response_model=Action
+)
+def resolve_action_endpoint(
+    pending_id: str,
+    decision: ActionDecision,
+    db: Session = Depends(get_db)
+):
+    # The user's answer to an action that needed confirmation (e.g.
+    # deleting a task). Expired or unknown ids change nothing.
+    action, conversation_id = AgentService.resolve(
+        db,
+        DEFAULT_USER_ID,
+        pending_id,
+        decision.approve
+    )
+
+    # Keep the turn's log in step, so reloaded history shows the outcome.
+    conversation = db.get(Conversation, conversation_id) if conversation_id else None
+
+    if conversation and conversation.actions:
+        conversation.actions = [
+            action.model_dump() if logged.get("pending_id") == pending_id else logged
+            for logged in conversation.actions
+        ]
+        db.commit()
+
+    return action
 
 @router.get(
     "/chat/history",

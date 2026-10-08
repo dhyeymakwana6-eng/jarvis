@@ -148,7 +148,8 @@ Task times (due_at, remind_at) are local times "YYYY-MM-DD HH:MM" computed from 
         db: Session,
         user_id: int,
         changes: TrackingChanges,
-        now: datetime | None = None
+        now: datetime | None = None,
+        agent_task_ids: set[int] | None = None
     ) -> list[str]:
         """
         Applies LLM-proposed changes after validating them: ids must
@@ -225,11 +226,20 @@ Task times (due_at, remind_at) are local times "YYYY-MM-DD HH:MM" computed from 
             if fields and update_goal(db, user_id, change.id, fields):
                 log.append(f"updated goal {change.id}: {fields}")
 
+        new_tasks, task_updates = changes.new_tasks, changes.task_updates
+
+        # The chat agent already acted on tasks this turn: new tasks
+        # would duplicate its own, and the tasks it touched are settled.
+        # Other updates ("I sent the report" it missed) still apply.
+        if agent_task_ids is not None:
+            new_tasks = []
+            task_updates = [change for change in task_updates if change.id not in agent_task_ids]
+
         log.extend(TaskService.apply_changes(
             db,
             user_id,
-            changes.new_tasks,
-            changes.task_updates,
+            new_tasks,
+            task_updates,
             created_projects,
             now or local_now()
         ))
@@ -257,9 +267,14 @@ Task times (due_at, remind_at) are local times "YYYY-MM-DD HH:MM" computed from 
         db: Session,
         user_id: int,
         message: str,
-        now: datetime | None = None
+        now: datetime | None = None,
+        agent_task_ids: set[int] | None = None
     ) -> list[str]:
-        """Asks the LLM what the message changes and applies it."""
+        """
+        Asks the LLM what the message changes and applies it.
+        agent_task_ids is set when the chat agent already changed tasks
+        this turn (see apply).
+        """
         if TrackingService.is_question(message):
             return []
 
@@ -274,7 +289,7 @@ Task times (due_at, remind_at) are local times "YYYY-MM-DD HH:MM" computed from 
         if changes is None:
             return []
 
-        return TrackingService.apply(db, user_id, changes, now)
+        return TrackingService.apply(db, user_id, changes, now, agent_task_ids)
 
     # ---------- Chat context ----------
 

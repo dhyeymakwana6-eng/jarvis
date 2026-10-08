@@ -21,6 +21,7 @@ def test_chat_uses_the_requested_persona_and_records_it(client, db, monkeypatch)
     class Reply:
         class message:
             content = "Done. Try to keep up."
+            tool_calls = None
 
     def fake_chat(**kwargs):
         sent.append(kwargs["messages"][0]["content"])

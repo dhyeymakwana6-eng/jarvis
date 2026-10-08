@@ -245,7 +245,8 @@ class TaskService:
         priority = f"[{task.priority}] " if task.priority != "normal" else ""
         suffix = f" ({'; '.join(details)})" if details else ""
 
-        return f"- {priority}{task.title}{suffix}"
+        # The id lets the chat model's tools refer to the task.
+        return f"- [{task.id}] {priority}{task.title}{suffix}"
 
     @staticmethod
     def _section(title: str, tasks: list[Task], now: datetime, project_names: dict[int, str]) -> str | None:
@@ -311,6 +312,5 @@ class TaskService:
         if not sections:
             return None
 
-        header = f"Now: {now.strftime('%A %d %B %Y, %H:%M')} ({now.tzname()})"
-
-        return header + "\n\n" + "\n\n".join(sections)
+        # The current time is in the prompt already (clock_context).
+        return "\n\n".join(sections)
