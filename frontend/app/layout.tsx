@@ -4,6 +4,13 @@ import "./globals.css";
 export const metadata: Metadata = {
   // <title> is rendered by JarvisOrb so it can follow the JARVIS/ULTRON mode.
   description: "Personal AI assistant with long-term memory",
+  // Added to an iPhone's home screen: full screen, named Jarvis
+  // (app/apple-icon.png is its icon; app/manifest.ts covers the rest).
+  appleWebApp: {
+    capable: true,
+    title: "Jarvis",
+    statusBarStyle: "black",
+  },
 };
 
 export const viewport: Viewport = {

@@ -57,13 +57,39 @@ cd frontend && npm run dev
 
 Open http://localhost:3000.
 
-**From a phone on the same Wi-Fi:** start the frontend with
-`npm run dev -- -H 0.0.0.0` and open `http://<this machine's IP>:3000`
-(find the IP with `ipconfig getifaddr en0` on macOS). Only the frontend
-is exposed; the backend stays on localhost behind the proxy. Note that
-anyone on that network can then chat with Jarvis and read its replies,
-and webcam gestures won't work there (browsers only allow the camera on
-localhost or HTTPS).
+### Phone and other devices
+
+Browsers only allow the mic, camera and notifications on HTTPS (or
+localhost), so for other devices run the frontend with local HTTPS:
+
+```bash
+cd frontend && npm run dev:lan
+```
+
+The first run creates a private certificate authority in
+`frontend/certs/` (gitignored); every run issues a certificate for
+`localhost`, `<this Mac>.local` and its current LAN IPs. Trust the CA
+once on each device:
+
+- **This Mac:** `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain frontend/certs/jarvis-ca.pem`
+  (or open it in Keychain Access and set it to *Always Trust*).
+- **iPhone/iPad:** AirDrop `frontend/certs/jarvis-ca.pem` to it, install the
+  profile (Settings → Profile Downloaded), then turn on full trust in
+  Settings → General → About → Certificate Trust Settings.
+- **Android:** Settings → Security → Encryption & credentials → Install a
+  certificate → CA certificate, and pick the file.
+
+Then open `https://<this Mac>.local:3000` (Android may need
+`https://<LAN IP>:3000`; `ipconfig getifaddr en0` shows it) and add it to
+the home screen (Safari: Share → Add to Home Screen; Chrome: Install app)
+to get Jarvis as a full-screen app. Only the frontend is exposed; the
+backend stays on localhost behind the proxy, and the passcode (see
+"Access") guards it. With everything on HTTPS you can also set
+`JARVIS_COOKIE_SECURE=1`.
+
+Keep `certs/jarvis-ca-key.pem` private: anyone with it could impersonate
+websites to devices that trust the CA. To undo, remove the profile or CA
+from each device and delete `frontend/certs/`.
 
 If the backend runs elsewhere, set
 `JARVIS_API_URL` (e.g. `JARVIS_API_URL=http://raspberrypi.local:8000 npm run dev`).

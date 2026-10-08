@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:lan": "bash scripts/lan-https.sh && next dev -H 0.0.0.0 --experimental-https --experimental-https-key certs/lan-key.pem --experimental-https-cert certs/lan.pem",
     "build": "next build",
     "start": "next start"
   },

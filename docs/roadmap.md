@@ -307,5 +307,28 @@ Status: Not Started
 
 ## Phase 20 — Multi-Device Ecosystem
 
+Status: In Progress
+
+### Task 1 — Local HTTPS and Installable App
+
+Status: Complete
+
+`npm run dev:lan` serves the frontend over HTTPS on the LAN with a
+certificate from a private local CA (`frontend/scripts/lan-https.sh`,
+system openssl only; the certificate is reissued each run for localhost,
+the Mac's .local name and its LAN IPs). Phones that trust the CA get the
+mic (TALK, wake word) and notifications. A web app manifest and icons make
+it installable on the home screen (standalone, no offline cache).
+
+### Task 2 — Live Sync, One Speaker
+
+Status: Not Started
+
+### Task 3 — Devices Panel
+
+Status: Not Started
+
+### Task 4 — Synced Settings
+
 Status: Not Started
 
