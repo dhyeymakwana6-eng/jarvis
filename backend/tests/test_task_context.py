@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timedelta, timezone
 
 from app.crud.task import create_task, update_task
@@ -14,6 +15,12 @@ def at(days=0, hour=0, minute=0):
     return NOW.replace(hour=hour, minute=minute) + timedelta(days=days)
 
 
+def context_of(db):
+    """The chat context without task ids (they depend on the database)."""
+    context = TaskService.to_context(db, TEST_USER_ID, NOW)
+    return context and re.sub(r"^- \[\d+\] ", "- ", context, flags=re.MULTILINE)
+
+
 def test_context_groups_tasks_by_urgency(db):
     jarvis = create_project(db, TEST_USER_ID, "Jarvis")
     create_task(db, TEST_USER_ID, "Submit report", due_at=at(-2, 18))
@@ -25,11 +32,9 @@ def test_context_groups_tasks_by_urgency(db):
     create_task(db, TEST_USER_ID, "Read paper", priority="high")
     create_task(db, TEST_USER_ID, "Cancelled one", status="cancelled")
 
-    context = TaskService.to_context(db, TEST_USER_ID, NOW)
+    context = context_of(db)
 
     assert context == (
-        "Now: Wednesday 07 October 2026, 10:30 (IST)\n"
-        "\n"
         "OVERDUE:\n"
         "- Submit report (was due Mon 05 Oct 18:00, 1 day ago)\n"
         "- Earlier today (was due 09:00, 1 hour ago)\n"
@@ -53,7 +58,7 @@ def test_times_are_shown_in_local_time(db):
     # Stored in UTC, shown in the user's timezone: 11:30 UTC = 17:00 IST.
     create_task(db, TEST_USER_ID, "Standup", due_at=datetime(2026, 10, 7, 11, 30, tzinfo=timezone.utc))
 
-    assert "- Standup (due 17:00)" in TaskService.to_context(db, TEST_USER_ID, NOW)
+    assert "- Standup (due 17:00)" in context_of(db)
 
 
 def test_delivered_and_past_reminders_are_not_listed(db):
@@ -62,7 +67,7 @@ def test_delivered_and_past_reminders_are_not_listed(db):
     create_task(db, TEST_USER_ID, "Missed", remind_at=at(0, 9))
     db.commit()
 
-    context = TaskService.to_context(db, TEST_USER_ID, NOW)
+    context = context_of(db)
 
     assert "- Delivered\n" in context + "\n"
     assert "- Missed" in context and "reminder" not in context
@@ -73,7 +78,7 @@ def test_sections_are_capped(db, monkeypatch):
     for i in range(5):
         create_task(db, TEST_USER_ID, f"Task {i}")
 
-    context = TaskService.to_context(db, TEST_USER_ID, NOW)
+    context = context_of(db)
 
     assert "- Task 0\n- Task 1\n- (+3 more)" in context
 
@@ -84,11 +89,17 @@ def test_done_today_is_listed(db):
     task.completed_at = at(0, 9)
     db.commit()
 
-    assert "Done today:\n- Ship v1" in TaskService.to_context(db, TEST_USER_ID, NOW)
+    assert "Done today:\n- Ship v1" in context_of(db)
 
 
 def test_no_context_without_tasks(db):
-    assert TaskService.to_context(db, TEST_USER_ID, NOW) is None
+    assert context_of(db) is None
+
+
+def test_tasks_carry_ids_for_the_agent_tools(db):
+    task = create_task(db, TEST_USER_ID, "Call mom", priority="high")
+
+    assert f"- [{task.id}] [high] Call mom" in TaskService.to_context(db, TEST_USER_ID, NOW)
 
 
 def test_chat_prompt_includes_tasks(db, monkeypatch):
@@ -111,5 +122,14 @@ def test_chat_prompt_includes_tasks(db, monkeypatch):
     MemoryService.generate_response(db, TEST_USER_ID, "what should I do today")
 
     system = sent["messages"][0]["content"]
-    assert "\n\nTasks:\nNow: " in system
-    assert "- Call mom" in system
+    assert "Now: " in system and "\n\nTasks:\n" in system
+    assert "] Call mom" in system
+
+
+def test_clock_context_spells_out_tomorrow():
+    from app.core.clock import clock_context
+
+    assert clock_context(NOW) == (
+        "Now: Wednesday 07 October 2026, 10:30 (IST). "
+        "Today is 2026-10-07; tomorrow is Thursday 2026-10-08."
+    )

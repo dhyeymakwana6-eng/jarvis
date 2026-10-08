@@ -6,6 +6,7 @@ from app.models.conversation import Conversation
 from app.services.embedding_service import EmbeddingService
 from app.services.profile_service import ProfileService
 from app.services.tracking_service import TrackingService
+from app.services.agent_service import TASK_TOOLS
 from .conflict_checker import ConflictChecker
 from .extractor import MemoryExtractor
 from .classifier import MemoryClassifier
@@ -151,10 +152,20 @@ class MemoryPipeline:
 
             # Projects/goals stated in the message ("I finished X",
             # "I want to do Y by Friday").
+            # Tasks too: a safety net for changes the chat agent missed
+            # (or claimed without a tool call). If it did act on tasks,
+            # the tracker skips new tasks and the ones it touched.
+            task_actions = [
+                action for action in conversation.actions or []
+                if action.get("tool") in TASK_TOOLS
+            ]
             TrackingService.process_message(
                 db,
                 user_id,
-                conversation.user_message
+                conversation.user_message,
+                agent_task_ids={
+                    action["task_id"] for action in task_actions if action.get("task_id")
+                } if task_actions else None
             )
 
             conversation.memories_processed = True

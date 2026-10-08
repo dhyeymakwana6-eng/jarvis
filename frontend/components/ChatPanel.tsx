@@ -1,18 +1,28 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { chat, getHistory, isOnline, JarvisError } from "@/lib/jarvisApi";
+import { chat, getHistory, isOnline, JarvisError, resolveAction, type Action } from "@/lib/jarvisApi";
 import { MODES, type Mode } from "@/lib/mode";
 import { canRecord, Recorder, transcribe } from "@/lib/speech";
 import { WakeListener } from "@/lib/wake";
 
 type MicState = "idle" | "listening" | "transcribing";
 
+const ACTION_MARK: Record<Action["status"], string> = {
+  done: "✓",
+  failed: "✕",
+  pending: "?",
+  declined: "–",
+  expired: "–",
+};
+
 interface Message {
   id: number;
   // Assistant replies are labelled with the persona that gave them.
   role: "user" | Mode;
   text: string;
+  /** What the assistant did to the user's tasks with this reply. */
+  actions?: Action[];
 }
 
 interface ChatPanelProps {
@@ -65,7 +75,7 @@ export default function ChatPanel({
             ? prev
             : turns.flatMap((t) => [
                 { id: nextId.current++, role: "user" as const, text: t.user_message },
-                { id: nextId.current++, role: t.mode, text: t.assistant_message },
+                { id: nextId.current++, role: t.mode, text: t.assistant_message, actions: t.actions ?? undefined },
               ]),
         );
       })
@@ -93,8 +103,27 @@ export default function ChatPanel({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const addMessage = (role: Message["role"], text: string) =>
-    setMessages((prev) => [...prev, { id: nextId.current++, role, text }]);
+  const addMessage = (role: Message["role"], text: string, actions?: Action[]) =>
+    setMessages((prev) => [...prev, { id: nextId.current++, role, text, actions }]);
+
+  // Confirm / cancel on an action that waits for the user (e.g. a delete).
+  const [resolving, setResolving] = useState<string | null>(null);
+  async function resolve(pendingId: string, approve: boolean) {
+    setResolving(pendingId);
+    try {
+      const outcome = await resolveAction(pendingId, approve);
+      setMessages((prev) =>
+        prev.map((m) => ({
+          ...m,
+          actions: m.actions?.map((a) => (a.pending_id === pendingId ? outcome : a)),
+        })),
+      );
+    } catch (err) {
+      setError(err instanceof JarvisError ? err.message : "REQUEST FAILED");
+    } finally {
+      setResolving(null);
+    }
+  }
 
   function send(e: FormEvent) {
     e.preventDefault();
@@ -117,8 +146,8 @@ export default function ChatPanel({
 
     try {
       const reply = await chat(query, mode, controller.signal);
-      addMessage(mode, reply);
-      onReply?.(reply, mode);
+      addMessage(mode, reply.response, reply.actions);
+      onReply?.(reply.response, mode);
       setOnline(true);
     } catch (err) {
       if (controller.signal.aborted) return;
@@ -290,6 +319,36 @@ export default function ChatPanel({
           <div key={m.id} className={`chat-msg chat-msg-${m.role}`}>
             <span className="chat-role">{m.role === "user" ? "YOU" : MODES[m.role].name}</span>
             <p>{m.text}</p>
+            {m.actions && m.actions.length > 0 && (
+              <ul className="chat-actions" aria-label="Actions">
+                {m.actions.map((a, i) => (
+                  <li key={a.pending_id ?? i} className={`chat-action chat-action-${a.status}`}>
+                    <span className="chat-action-mark" aria-hidden>{ACTION_MARK[a.status]}</span>
+                    <span>{a.status === "pending" ? `${a.summary}?` : a.summary}</span>
+                    {a.status === "pending" && a.pending_id && (
+                      <span className="chat-action-buttons">
+                        <button
+                          type="button"
+                          className="hud-btn chat-action-btn"
+                          disabled={resolving === a.pending_id}
+                          onClick={() => void resolve(a.pending_id!, true)}
+                        >
+                          CONFIRM
+                        </button>
+                        <button
+                          type="button"
+                          className="hud-btn chat-action-btn"
+                          disabled={resolving === a.pending_id}
+                          onClick={() => void resolve(a.pending_id!, false)}
+                        >
+                          CANCEL
+                        </button>
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         ))}
         {pending && (

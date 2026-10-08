@@ -1,5 +1,5 @@
 import os
-from typing import TypeVar
+from typing import Callable, TypeVar
 
 from ollama import chat
 from pydantic import BaseModel, ValidationError
@@ -49,8 +49,18 @@ Rules:
   mentioning memories.
 - Earlier messages in this chat are context for follow-up questions;
   your earlier replies are not a source of facts about the user.
-- Tasks and reminders the user asks for are saved automatically right
-  after your reply; confirm them briefly with the time you understood.
+- You change the user's tasks only by calling your tools. When the user
+  asks for, or reports, a change to their tasks (a new task or reminder,
+  finishing or cancelling a listed task, a new time), call the tool
+  first: one call per change, for every change in the message. Never say
+  something was saved, changed or completed unless a tool result
+  confirms it; if a tool fails, say so.
+- Don't ask before acting on a clear request. Vague times have defaults:
+  morning 09:00, afternoon 14:00, evening 18:00, tonight 20:00, "at 6"
+  means the next 6 o'clock still ahead (18:00 if 06:00 has passed); a
+  day alone is that date. A reminder is a task with remind_at.
+- Confirm actions briefly with the time you used. Don't mention task
+  ids.
 - Be concise and accurate."""
 
     @classmethod
@@ -65,10 +75,21 @@ Rules:
         tracking_context: str | None = None,
         task_context: str | None = None,
         history: list[tuple[str, str]] | None = None,
-        mode: str = "jarvis"
+        mode: str = "jarvis",
+        clock_context: str | None = None,
+        tools: list[dict] | None = None,
+        run_tool: Callable[[str, dict], str] | None = None
     ) -> str:
+        """
+        The reply to user_query. With tools, the model may call them
+        (run_tool executes one and returns its result) for up to
+        MAX_TOOL_ROUNDS rounds before answering.
+        """
 
         system = self.system_prompt(mode)
+
+        if clock_context:
+            system += f"\n\n{clock_context}"
 
         if profile_context:
             system += f"\n\nUser Profile:\n{profile_context}"
@@ -90,20 +111,43 @@ Rules:
 
         messages.append({"role": "user", "content": user_query})
 
+        for round_ in range(self.MAX_TOOL_ROUNDS + 1):
+            # The last round has no tools, so the model has to answer.
+            offer_tools = tools if run_tool and round_ < self.MAX_TOOL_ROUNDS else None
+            response = self._chat(messages, offer_tools)
+            calls = (response.message.tool_calls or []) if offer_tools else []
+
+            if not calls:
+                break
+
+            messages.append(response.message)
+            for call in calls:
+                messages.append({
+                    "role": "tool",
+                    "tool_name": call.function.name,
+                    "content": run_tool(call.function.name, dict(call.function.arguments or {}))
+                })
+
+        content = (response.message.content or "").strip()
+
+        return content or self.EMPTY_RESPONSE_FALLBACK
+
+    # Model calls per reply that may use tools; a request rarely needs
+    # more than two (e.g. finish one task, add another).
+    MAX_TOOL_ROUNDS = 3
+
+    def _chat(self, messages: list, tools: list[dict] | None):
         try:
-            response = chat(
+            return chat(
                 model=self.MODEL,
                 think=self.THINK,
-                messages=messages
+                messages=messages,
+                **({"tools": tools} if tools else {})
             )
         except Exception as error:
             raise LLMUnavailableError(
                 f"LLM call failed ({self.MODEL}): {error}"
             ) from error
-
-        content = (response.message.content or "").strip()
-
-        return content or self.EMPTY_RESPONSE_FALLBACK
 
 
     def generate_structured(

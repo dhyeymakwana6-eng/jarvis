@@ -1,4 +1,5 @@
 from sqlalchemy import Integer, String, Text, ForeignKey, Boolean
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base, TimestampMixin
@@ -22,3 +23,7 @@ class Conversation(Base, TimestampMixin):
     # rows are picked up again at startup, so a restart mid-extraction
     # doesn't lose memories.
     memories_processed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    # What the assistant did this turn (app.services.agent_service.Action
+    # dicts), e.g. tasks it created. None when it took no action.
+    actions: Mapped[list | None] = mapped_column(JSONB, nullable=True)

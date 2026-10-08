@@ -26,7 +26,22 @@ export async function isOnline(): Promise<boolean> {
 }
 
 /** Sends one message; the persona answers using memories, profile, goals and tasks. */
-export async function chat(query: string, mode: Mode, signal?: AbortSignal): Promise<string> {
+/** Something the assistant did (or wants to do) to the user's tasks. */
+export interface Action {
+  tool: string;
+  summary: string;
+  // "pending" waits for the user's confirmation (e.g. deleting a task).
+  status: "done" | "failed" | "pending" | "declined" | "expired";
+  pending_id: string | null;
+  task_id: number | null;
+}
+
+export interface ChatReply {
+  response: string;
+  actions: Action[];
+}
+
+export async function chat(query: string, mode: Mode, signal?: AbortSignal): Promise<ChatReply> {
   let res: Response;
   try {
     res = await fetch(`${BASE}/memory/chat`, {
@@ -47,8 +62,23 @@ export async function chat(query: string, mode: Mode, signal?: AbortSignal): Pro
   }
   if (!res.ok) throw new JarvisError(await detail(res));
 
-  const body = (await res.json()) as { response: string };
-  return body.response;
+  return (await res.json()) as ChatReply;
+}
+
+/** Confirms or declines an action that's waiting; returns the outcome. */
+export async function resolveAction(pendingId: string, approve: boolean): Promise<Action> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/memory/chat/actions/${encodeURIComponent(pendingId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approve }),
+    });
+  } catch {
+    throw new JarvisError("BACKEND UNREACHABLE");
+  }
+  if (!res.ok) throw new JarvisError(await detail(res));
+  return (await res.json()) as Action;
 }
 
 export interface ChatTurn {
@@ -56,6 +86,7 @@ export interface ChatTurn {
   user_message: string;
   assistant_message: string;
   mode: Mode;
+  actions: Action[] | null;
   created_at: string;
 }
 

@@ -241,7 +241,21 @@ waiting for a reply or speaking.
 
 ## Phase 17 — Agent Framework
 
-Status: Not Started
+Status: In Progress
+
+### Task 1 — Task Tools in Chat
+
+Status: Complete
+
+The chat model calls tools (Ollama tool calling, same local model) to
+create, complete/cancel, reschedule, list and delete tasks before it
+replies, so the reply reflects what actually happened. Each action shows
+under the reply and is logged on the turn (`conversations.actions`);
+deleting waits for CONFIRM. The prompt always carries today's and
+tomorrow's date. The background tracker stays as a safety net: when the
+agent acted on tasks it skips new tasks (no duplicates) and the tasks the
+agent touched, and still applies changes the agent missed.
+`JARVIS_LIVE_LLM=1 pytest tests/test_agent_live.py` checks the real model.
 
 ## Phase 18 — Automation Engine
 

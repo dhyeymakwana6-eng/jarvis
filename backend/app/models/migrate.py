@@ -39,6 +39,7 @@ STATEMENTS = [
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_stale BOOLEAN NOT NULL DEFAULT true",
     "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS memories_processed BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS mode VARCHAR(20) NOT NULL DEFAULT 'jarvis'",
+    "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS actions JSONB",
     "ALTER TABLE projects ADD COLUMN IF NOT EXISTS description TEXT",
     "ALTER TABLE projects ALTER COLUMN status SET DEFAULT 'active'",
     "ALTER TABLE projects ALTER COLUMN next_action DROP NOT NULL",

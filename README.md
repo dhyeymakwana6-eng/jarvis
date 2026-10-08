@@ -96,6 +96,10 @@ Optional backend environment: `LLM_MODEL` (default `qwen3.5:9b`),
   speak, release. Whisper transcribes it locally and sends it. The mic is
   open only while held, and needs localhost or HTTPS (not plain
   `http://<LAN IP>`). `WHISPER_MODEL` picks the model (e.g. `small.en`).
+- **It acts, not just talks:** ask it to add, finish, cancel, move or
+  delete tasks and reminders ("remind me to call mom at 6", "I sent the
+  report") and it does so with tools before replying; what it did is
+  listed under the reply. Deleting asks you to CONFIRM first.
 - **Wake word:** turn on **WAKE** (or `W`) and say "Hey Jarvis" (in
   either mode). A chime plays, you speak, and it sends when you pause.
   While on, the mic stays open and the latest 2.5s of audio goes to the

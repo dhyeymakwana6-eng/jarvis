@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.services.agent_service import Action
+
 
 # Which persona answers. Same memory and tasks; different voice.
 Mode = Literal["jarvis", "ultron"]
@@ -15,6 +17,12 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
+    # Tasks it created or changed, and any waiting for confirmation.
+    actions: list[Action] = []
+
+
+class ActionDecision(BaseModel):
+    approve: bool
 
 
 class ChatTurn(BaseModel):
@@ -24,4 +32,5 @@ class ChatTurn(BaseModel):
     user_message: str
     assistant_message: str
     mode: str
+    actions: list[Action] | None = None
     created_at: datetime
